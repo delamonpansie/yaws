@@ -20,7 +20,6 @@
 #include "syslog.h"
 #include "graphite.h"
 #include "daisy.h"
-#include "main.h"
 
 static const char* TAG = "undefined";
 
