@@ -48,7 +48,6 @@ static void on_got_ip(void *arg, esp_event_base_t event_base,
         if (event->esp_netif != netif)
                 return;
 #endif
-        ESP_LOGI(TAG, "got ip addr " IPSTR, IP2STR(&event->ip_info.ip));
         memcpy(&ip_addr, &event->ip_info.ip, sizeof(ip_addr));
         ESP_ERROR_CHECK(esp_wifi_get_mac(ESP_IF_WIFI_STA, mac_addr));
 
