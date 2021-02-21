@@ -95,7 +95,7 @@ static char *ota_url()
         char version[33] = {0,};
         esp_http_client_read(client, version, sizeof version - 1);
         for (char *p = version; *p; p++) {
-                if (*p == '\r' || *p == '\n') {
+                if (isspace(*p)) {
                         *p = 0;
                         break;
                 }
