@@ -68,11 +68,6 @@ void app_main()
 
         log_init();
 
-        struct timeval tv_now;
-        gettimeofday(&tv_now, NULL);
-
-        wifi_connect();
-
 #define ADDR MCP9808_I2C_ADDR_000
 #define SDA_GPIO GPIO_NUM_4
 #define SCL_GPIO GPIO_NUM_5
@@ -83,12 +78,26 @@ void app_main()
                         .mode = GPIO_MODE_OUTPUT,
         });
         gpio_set_level(PWR_GPIO, 1); // power-on sensor module
+        struct timeval mcp9808_poweron;
+        gettimeofday(&mcp9808_poweron, NULL);
+
+        // connect to WiFi before anything else. OTA must run _before_ any potentially buggy code
+        wifi_connect();
 
         i2c_dev_t dev = {.port = 0};
         ESP_ERROR_CHECK(mcp9808_init_desc(&dev, ADDR, 0, SDA_GPIO, SCL_GPIO));
         ESP_ERROR_CHECK(mcp9808_init(&dev));
 
-        vTaskDelay(300 / portTICK_RATE_MS); // wait for measurement
+        struct timeval now;
+        gettimeofday(&now, NULL);
+        int poweron_duration_msec = (now.tv_sec - mcp9808_poweron.tv_sec) *  1000 +
+                (now.tv_usec - mcp9808_poweron.tv_usec) / 1000;
+
+        // mcp9808 needs 250ms to perform measurement
+        int measurement_delay = (250 * 1.2) ;
+        if (poweron_duration_msec <  measurement_delay)
+                vTaskDelay((measurement_delay - poweron_duration_msec) / portTICK_RATE_MS);
+
         float temperature;
         esp_err_t res = mcp9808_get_temperature(&dev, &temperature, NULL, NULL, NULL);
 
