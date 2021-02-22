@@ -102,14 +102,3 @@ esp_err_t graphite(const char *ip, const char *prefix, const char **metric, floa
         return ESP_OK;
 }
 
-char *mac_prefix(const char *prefix)
-{
-        static char buf[64];
-        if (buf[0] == 0) {
-                snprintf(buf, sizeof buf - 1, "%s%02x%02x%02x%02x%02x%02x",
-                         prefix,
-                         mac_addr[0], mac_addr[1], mac_addr[2],
-                         mac_addr[3], mac_addr[4], mac_addr[5]);
-        }
-        return buf;
-}

@@ -105,7 +105,7 @@ void app_main()
 
         if (res == ESP_OK) {
                 ESP_LOGI(TAG, "Temperature: %.2f°C", temperature);
-                graphite("10.3.14.10", mac_prefix("yaws.sensor_"),
+                graphite("10.3.14.10", macstr("yaws.sensor_", ""),
                          (const char*[]){"temperature", "voltage", NULL},
                          (float[]){temperature, system_vdd()});
         } else {

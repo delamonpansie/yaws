@@ -7,3 +7,4 @@ extern char bootp[DHCP_BOOT_FILE_LEN];
 esp_err_t wifi_connect(void);
 esp_err_t wifi_disconnect(void);
 int wifi_connected(void);
+char *macstr(const char *prefix, const char *suffix);

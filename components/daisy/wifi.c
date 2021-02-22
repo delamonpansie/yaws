@@ -65,13 +65,14 @@ static void on_shutdown()
 }
 #endif
 
-static char *ota_url()
+static char *ota_same_version = "same";
+static char *ota_url(const char *base)
 {
         const esp_app_desc_t *app_desc = esp_ota_get_app_description();
         static char url[DHCP_BOOT_FILE_LEN];
         char *result = NULL;
 
-        snprintf(url, sizeof url, "http://%s%s.version", ota_base, app_desc->project_name);
+        snprintf(url, sizeof url, "http://%s%s.version", base, app_desc->project_name);
         esp_http_client_config_t client_config = {
                 .url = url,
                 .method = HTTP_METHOD_GET,
@@ -86,7 +87,7 @@ static char *ota_url()
 
         int status_code = esp_http_client_get_status_code(client);
         if (status_code != 200) {
-                ESP_LOGE(TAG, "OTA version fetch failed: status code %d", status_code);
+                ESP_LOGE(TAG, "OTA version %s fetch failed: status code %d", url, status_code);
                 goto out;
         }
 
@@ -101,10 +102,12 @@ static char *ota_url()
         }
 
         ESP_LOGI(TAG, "OTA remote version: %s, local version: %s", version, app_desc->version);
-        if (strcmp(version, app_desc->version) == 0)
+        if (strcmp(version, app_desc->version) == 0) {
+                result = ota_same_version;
                 goto out;
+        }
 
-        snprintf(url, sizeof url, "http://%s%s.bin", ota_base, app_desc->project_name);
+        snprintf(url, sizeof url, "http://%s%s.bin", base, app_desc->project_name);
         result = url;
 out:
         esp_http_client_cleanup(client);
@@ -118,11 +121,17 @@ static void ota()
                 return;
         ota_disabled = 0x13;
 
-        char *url = ota_url();
+        char *url = NULL;
         if (memcmp(bootp, "http://", 7) == 0)
                 url = bootp;
 
         if (url == NULL)
+                url = ota_url(macstr(ota_base, "/"));
+
+        if (url == NULL)
+                url = ota_url(ota_base);
+
+        if (url == NULL || url == ota_same_version)
                 return;
 
         ESP_LOGI(TAG, "OTA %s", url);
@@ -214,4 +223,11 @@ esp_err_t wifi_disconnect(void)
         }
 #endif
         return ESP_OK;
+}
+
+char *macstr(const char *prefix, const char *suffix)
+{
+        static char buf[64];
+        snprintf(buf, sizeof buf - 1, "%s"MACSTR"%s", prefix, MAC2STR(mac_addr), suffix);
+        return buf;
 }
