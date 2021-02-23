@@ -28,7 +28,8 @@ static float system_vdd()
         uint16_t adc_data;
         esp_err_t err = adc_read(&adc_data);
         if (err == ESP_OK)  {
-                float vdd = (float)adc_data / 1000;
+                float offset = 4.85;  // should be 5 actually (100kOhm + 220kOhm + 180kOhm) / 100 kOhm
+                float vdd = (float)adc_data / 1000 * offset;
                 ESP_LOGI(TAG, "Voltage: %.2fV", vdd);
                 return vdd;
         }
@@ -51,7 +52,7 @@ void app_main()
         ESP_ERROR_CHECK(nvs_flash_init());
         ESP_ERROR_CHECK(esp_netif_init());
         ESP_ERROR_CHECK(esp_event_loop_create_default());
-        ESP_ERROR_CHECK(adc_init(&(adc_config_t){.mode = ADC_READ_VDD_MODE, .clk_div = 8}));
+        ESP_ERROR_CHECK(adc_init(&(adc_config_t){.mode = ADC_READ_TOUT_MODE, .clk_div = 8}));
         ESP_ERROR_CHECK(i2cdev_init());
 
         ESP_LOGI(TAG, "version: %s", app_desc->version);
