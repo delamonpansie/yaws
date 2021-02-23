@@ -4,4 +4,4 @@ cmake_minimum_required(VERSION 3.5)
 
 set(EXTRA_COMPONENT_DIRS /home/mon/esp/esp-idf-lib/components /home/mon/esp/yaws/components)
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
-project(yaws-sensor)
+project(sensor-mcp9808)

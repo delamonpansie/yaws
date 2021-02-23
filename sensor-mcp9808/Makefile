@@ -1,3 +1,3 @@
-PROJECT_NAME := yaws-sensor-mcp9808
+PROJECT_NAME := sensor-mcp9808
 EXTRA_COMPONENT_DIRS += ../components
 include $(IDF_PATH)/make/project.mk
