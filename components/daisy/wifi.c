@@ -73,6 +73,7 @@ static char *ota_url(const char *base)
         char *result = NULL;
 
         snprintf(url, sizeof url, "http://%s%s.version", base, app_desc->project_name);
+        ESP_LOGI(TAG, "OTA checking %s", url);
         esp_http_client_config_t client_config = {
                 .url = url,
                 .method = HTTP_METHOD_GET,
