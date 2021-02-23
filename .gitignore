@@ -1,0 +1,5 @@
+.gitignore
+sensor*/build
+display/build
+sdkconfig.old
+components/daisy/secrets.txt
