@@ -43,7 +43,7 @@ void app_main()
         TAG = app_desc->project_name;
         log_early_init();
 
-        esp_log_level_set("*", ESP_LOG_INFO);
+        esp_log_level_set("*", ESP_LOG_ERROR);
         esp_log_level_set("esp_https_ota", ESP_LOG_INFO);
         esp_log_level_set(TAG, ESP_LOG_INFO);
         esp_log_level_set("yaws-wifi", ESP_LOG_INFO);
