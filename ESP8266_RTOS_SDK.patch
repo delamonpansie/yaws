@@ -1,0 +1,115 @@
+diff --git a/components/esp_https_ota/src/esp_https_ota.c b/components/esp_https_ota/src/esp_https_ota.c
+index d326c2be..ac9386d2 100644
+--- a/components/esp_https_ota/src/esp_https_ota.c
++++ b/components/esp_https_ota/src/esp_https_ota.c
+@@ -64,9 +64,22 @@ esp_err_t esp_https_ota(const esp_http_client_config_t *config)
+     }
+     esp_http_client_fetch_headers(client);
+ 
+-    esp_ota_handle_t update_handle = 0;
++    int status_code = esp_http_client_get_status_code(client);
++    switch (status_code) {
++    case 404:
++            return ESP_ERR_NOT_FOUND;
++    case 200:
++            break;
++    default:
++            ESP_LOGE(TAG, "HTTP GET request failed, status_code:%d", status_code);
++            return ESP_FAIL;
++    }
++
++    int content_length = esp_http_client_get_content_length(client);
++
++            esp_ota_handle_t update_handle = 0;
+     const esp_partition_t *update_partition = NULL;
+-    ESP_LOGI(TAG, "Starting OTA...");
++    ESP_LOGI(TAG, "Starting OTA (image %d bytes)...", content_length);
+     update_partition = esp_ota_get_next_update_partition(NULL);
+     if (update_partition == NULL) {
+         ESP_LOGE(TAG, "Passive OTA partition not found");
+@@ -95,7 +108,7 @@ esp_err_t esp_https_ota(const esp_http_client_config_t *config)
+     while (1) {
+         int data_read = esp_http_client_read(client, upgrade_data_buf, OTA_BUF_SIZE);
+         if (data_read == 0) {
+-            ESP_LOGI(TAG, "Connection closed,all data received");
++            ESP_LOGI(TAG, "Connection closed, %d bytes received", binary_file_len);
+             break;
+         }
+         if (data_read < 0) {
+@@ -105,6 +118,7 @@ esp_err_t esp_https_ota(const esp_http_client_config_t *config)
+         if (data_read > 0) {
+             ota_write_err = esp_ota_write( update_handle, (const void *)upgrade_data_buf, data_read);
+             if (ota_write_err != ESP_OK) {
++                ESP_LOGE(TAG, "Error: esp_ota_write failed! err=0x%d", err);
+                 break;
+             }
+             binary_file_len += data_read;
+diff --git a/components/lwip/port/esp8266/freertos/sys_arch.c b/components/lwip/port/esp8266/freertos/sys_arch.c
+index 8338a348..92a80af2 100644
+--- a/components/lwip/port/esp8266/freertos/sys_arch.c
++++ b/components/lwip/port/esp8266/freertos/sys_arch.c
+@@ -79,7 +79,7 @@ void
+ sys_mutex_lock(sys_mutex_t *pxMutex)
+ {
+   BaseType_t ret = xSemaphoreTake(*pxMutex, portMAX_DELAY);
+-
++  (void)ret;
+   LWIP_ASSERT("failed to take the mutex", ret == pdTRUE);
+ }
+ 
+@@ -91,8 +91,8 @@ sys_mutex_lock(sys_mutex_t *pxMutex)
+ void
+ sys_mutex_unlock(sys_mutex_t *pxMutex)
+ {
+-  BaseType_t ret = xSemaphoreGive(*pxMutex);
+-
++  BaseType_t ret  = xSemaphoreGive(*pxMutex);
++  (void)ret;
+   LWIP_ASSERT("failed to give the mutex", ret == pdTRUE);
+ }
+ 
+@@ -132,6 +132,7 @@ sys_sem_new(sys_sem_t *sem, u8_t count)
+ 
+   if (count == 1) {
+       BaseType_t ret = xSemaphoreGive(*sem);
++      (void)ret;
+       LWIP_ASSERT("sys_sem_new: initial give failed", ret == pdTRUE);
+   }
+ 
+@@ -147,6 +148,7 @@ void
+ sys_sem_signal(sys_sem_t *sem)
+ {
+   BaseType_t ret = xSemaphoreGive(*sem);
++  (void)ret;
+   /* queue full is OK, this is a signal only... */
+   LWIP_ASSERT("sys_sem_signal: sane return value",
+              (ret == pdTRUE) || (ret == errQUEUE_FULL));
+@@ -245,6 +247,7 @@ void
+ sys_mbox_post(sys_mbox_t *mbox, void *msg)
+ {
+   BaseType_t ret = xQueueSendToBack((*mbox)->os_mbox, &msg, portMAX_DELAY);
++  (void)ret;
+   LWIP_ASSERT("mbox post failed", ret == pdTRUE);
+ }
+ 
+@@ -380,6 +383,7 @@ sys_mbox_free(sys_mbox_t *mbox)
+     return;
+   }
+   UBaseType_t msgs_waiting = uxQueueMessagesWaiting((*mbox)->os_mbox);
++  (void)msgs_waiting;
+   LWIP_ASSERT("mbox quence not empty", msgs_waiting == 0);
+ 
+   vQueueDelete((*mbox)->os_mbox);
+diff --git a/components/lwip/port/esp8266/include/lwipopts.h b/components/lwip/port/esp8266/include/lwipopts.h
+index baa7dff0..e7a5aea3 100644
+--- a/components/lwip/port/esp8266/include/lwipopts.h
++++ b/components/lwip/port/esp8266/include/lwipopts.h
+@@ -268,6 +268,8 @@
+ 
+ #endif
+ 
++#define LWIP_DHCP_BOOTP_FILE		1
++
+ /*
+    ------------------------------------
+    ---------- AUTOIP options ----------
