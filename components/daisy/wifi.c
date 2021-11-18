@@ -1,11 +1,24 @@
 #include <string.h>
 
+
+/*
+  OTA code has support for passing OTA URL as BOOTP option
+  In order to enable it:
+  1. configure DHCP server
+     Example for dnsmasq
+     dhcp-boot=tag:yaws-sensor-mcp9808,http://yaws.home.arpa/ota/84:cc:a8:ac:23:bd/sensor-mcp9808.bin
+  2. enable BOOTP support in IDF
+     Add `#define LWIP_DHCP_BOOTP_FILE 1' to components/lwip/port/esp8266/include/lwipopts.h
+ */
+
 #include "esp_wifi.h"
 #include "esp_log.h"
 #include "esp_sleep.h"
 #include "esp_ota_ops.h"
 #include "esp_https_ota.h"
-#include "lwip/dhcp.h"
+#ifdef BOOTP_OTA
+#  include "lwip/dhcp.h"
+#endif
 #include "esp_netif.h"
 #if defined(CONFIG_IDF_TARGET_ESP8266)
 typedef struct netif esp_netif_t;
@@ -23,7 +36,9 @@ static const char *TAG = "yaws-wifi";
 static EventGroupHandle_t status;
 ip4_addr_t ip_addr;
 uint8_t mac_addr[6];
+#ifdef BOOTP_OTA
 char bootp[DHCP_BOOT_FILE_LEN];
+#endif
 
 static esp_netif_t *netif = NULL;
 static wifi_config_t wifi_config = {
@@ -51,10 +66,11 @@ static void on_got_ip(void *arg, esp_event_base_t event_base,
         memcpy(&ip_addr, &event->ip_info.ip, sizeof(ip_addr));
         ESP_ERROR_CHECK(esp_wifi_get_mac(ESP_IF_WIFI_STA, mac_addr));
 
+#ifdef BOOTP_OTA
         struct dhcp *dhcp = netif_dhcp_data(netif);
         memset(bootp, 0, sizeof bootp);
         memcpy(bootp, dhcp->boot_file_name, sizeof bootp - 1);
-
+#endif
         xEventGroupSetBits(status, BIT(1));
 }
 
@@ -117,15 +133,19 @@ out:
 
 static void ota()
 {
+        char *url = NULL;
+
+        // OTA source is checked only once after boot to save power.
+        // If you want to force OTA: do a power cycle (reset is not enough).
         static RTC_DATA_ATTR char ota_disabled;
         if (ota_disabled == 0x13)
                 return;
         ota_disabled = 0x13;
 
-        char *url = NULL;
+#ifdef BOOTP_OTA
         if (memcmp(bootp, "http://", 7) == 0)
                 url = bootp;
-
+#endif
         if (url == NULL)
                 url = ota_url(macstr(ota_base, "/"));
 
