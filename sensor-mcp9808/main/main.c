@@ -85,6 +85,8 @@ void app_main()
         // connect to WiFi before anything else. OTA must run _before_ any potentially buggy code
         wifi_connect();
 
+        graphite_init();
+
         i2c_dev_t dev = {.port = 0};
         ESP_ERROR_CHECK(mcp9808_init_desc(&dev, ADDR, 0, SDA_GPIO, SCL_GPIO));
         ESP_ERROR_CHECK(mcp9808_init(&dev));
@@ -106,7 +108,7 @@ void app_main()
 
         if (res == ESP_OK) {
                 ESP_LOGI(TAG, "Temperature: %.2f°C", temperature);
-                graphite("10.3.14.10", macstr("yaws.sensor_", ""),
+                graphite(macstr("yaws.sensor_", ""),
                          (const char*[]){"temperature", "voltage", NULL},
                          (float[]){temperature, system_vdd()});
         } else {

@@ -79,7 +79,7 @@ static void read_sensor()
         }
 
         ESP_LOGI(TAG, "Temperature: %.2f, pressure: %.2f, humidity: %.2f", temperature, pressure, humidity);
-        graphite("10.3.14.10", sensor_prefix(),
+        graphite(sensor_prefix(),
                  (const char*[]){"temperature", "pressure", "humidity", "voltage", NULL},
                  (float[]){temperature, pressure, humidity, system_vdd()});
 }
@@ -117,6 +117,8 @@ void app_main()
 
         log_init();
         wifi_connect();
+
+        graphite_init();
 
         read_sensor();
 

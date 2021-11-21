@@ -1,0 +1,9 @@
+menu "Graphite"
+
+config GRAPHITE_ADDR
+    string "IPv4 address of Graphite server"
+
+config GRAPHITE_PORT
+    int "Port of Graphite server"
+    default 2003
+endmenu
