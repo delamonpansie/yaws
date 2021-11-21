@@ -36,8 +36,14 @@ static const char *TAG = "yaws-wifi";
 static EventGroupHandle_t status;
 ip4_addr_t ip_addr;
 uint8_t mac_addr[6];
+
+#ifdef DHCP_BOOT_FILE_LEN
+# define OTA_URL_LEN DHCP_BOOT_FILE_LEN
+#else
+# define OTA_URL_LEN 128U
+#endif
 #ifdef BOOTP_OTA
-char bootp[DHCP_BOOT_FILE_LEN];
+char bootp[OTA_URL_LEN];
 #endif
 
 static esp_netif_t *netif = NULL;
@@ -85,7 +91,7 @@ static char *ota_same_version = "same";
 static char *ota_url(const char *base)
 {
         const esp_app_desc_t *app_desc = esp_ota_get_app_description();
-        static char url[DHCP_BOOT_FILE_LEN];
+        static char url[OTA_URL_LEN];
         char *result = NULL;
 
         snprintf(url, sizeof url, "http://%s%s.version", base, app_desc->project_name);
