@@ -23,7 +23,7 @@ static int sock = -1;
 static SemaphoreHandle_t lock;
 static MessageBufferHandle_t msgbuf;
 
-const int facility = 16; // local0
+const int facility = CONFIG_SYSLOG_FACILITY;
 
 #define SIZE 512
 
@@ -105,16 +105,14 @@ static int log_vprintf(const char *fmt, va_list va)
 
 void log_task(void *arg)
 {
-        const char *syslog_addr = "10.3.14.10";
-
         char msg[SIZE+1], tag[32], header[64];
 
         struct sockaddr_in addr = {
                 .sin_family = AF_INET,
                 .sin_addr = (struct in_addr){
-                        .s_addr = inet_addr(syslog_addr),
+                        .s_addr = inet_addr(CONFIG_SYSLOG_ADDR),
                 },
-                .sin_port = htons(514)
+                .sin_port = htons(CONFIG_SYSLOG_PORT)
         };
         struct iovec iov[2] = {
                 { .iov_base = header,
@@ -162,6 +160,11 @@ void log_task(void *arg)
 
 void log_early_init()
 {
+        if (strlen(CONFIG_SYSLOG_ADDR) == 0) {
+                ESP_LOGE(TAG, "syslog address is not configured, logging is disabled");
+                return;
+        }
+
         lock = xSemaphoreCreateMutex();
         if (lock == NULL) {
                 ESP_LOGE(TAG, "Unable to create semaphore");
