@@ -27,9 +27,9 @@ typedef struct netif esp_netif_t;
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
 
-#include "daisy.h"
+#include "wifi.h"
 
-static const char *ota_base = "yaws.home.arpa/ota/";
+static const char *ota_base = CONFIG_OTA_BASE;
 
 static const char *TAG = "yaws-wifi";
 
@@ -49,7 +49,8 @@ char bootp[OTA_URL_LEN];
 static esp_netif_t *netif = NULL;
 static wifi_config_t wifi_config = {
         .sta = {
-#include "secrets.txt"
+                .ssid = CONFIG_SSID,
+                .password = CONFIG_PASSWORD
         }
 };
 

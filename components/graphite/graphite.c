@@ -15,7 +15,7 @@
 #include "lwip/netdb.h"
 #include "lwip/dns.h"
 
-#include "daisy.h"
+#include "wifi.h"
 
 static const char* TAG = "yaws-graphite";
 

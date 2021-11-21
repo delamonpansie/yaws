@@ -18,7 +18,7 @@
 
 #include "syslog.h"
 #include "graphite.h"
-#include "daisy.h"
+#include "wifi.h"
 
 static const char* TAG = "undefined";
 
