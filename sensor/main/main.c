@@ -75,7 +75,7 @@ static void read_bme280(struct timeval *poweron __attribute__(()))
         ESP_LOGI(TAG, "Temperature: %.2f, pressure: %.2f, humidity: %.2f", temperature, pressure, humidity);
         graphite(macstr("yaws.sensor_", ""),
                  (const char*[]){"temperature", "pressure", "humidity", "voltage", NULL},
-                 (float[]){temperature, pressure, humidity, system_vdd()});
+                 (const float[]){temperature, pressure, humidity, system_vdd()});
 }
 
 static void read_mcp9808(struct timeval *poweron)
@@ -100,9 +100,13 @@ static void read_mcp9808(struct timeval *poweron)
 
         if (res == ESP_OK) {
                 ESP_LOGI(TAG, "Temperature: %.2f°C", temperature);
-                graphite(macstr("yaws.sensor_", ""),
-                         (const char*[]){"temperature", "voltage", NULL},
-                         (float[]){temperature, system_vdd()});
+
+                const char *metric[] = {"temperature", "voltage", NULL};
+                const float value[] = {temperature, system_vdd() };
+                if (value[1] < 0.5) // ADC is not connected, do not send vdd measurment
+                        metric[1] = NULL;
+
+                graphite(macstr("yaws.sensor_", ""), metric, value);
         } else {
                 ESP_LOGE(TAG, "Could not get results: %d (%s)", res, esp_err_to_name(res));
         }
