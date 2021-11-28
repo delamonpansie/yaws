@@ -138,6 +138,10 @@ out:
         return result;
 }
 
+#ifndef CONFIG_PARTITION_TABLE_TWO_OTA
+# error CONFIG_PARTITION_TABLE_TWO_OTA is required for OTA support
+#endif
+
 static void ota()
 {
         char *url = NULL;
