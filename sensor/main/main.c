@@ -80,26 +80,23 @@ static void read_bme280(struct timeval *poweron __attribute__(()))
 
 static void read_mcp9808(struct timeval *poweron)
 {
-#define ADDR MCP9808_I2C_ADDR_000
-
         i2c_dev_t dev = {.port = 0};
-        ESP_ERROR_CHECK(mcp9808_init_desc(&dev, ADDR, 0, SDA_GPIO, SCL_GPIO));
+        ESP_ERROR_CHECK(mcp9808_init_desc(&dev, MCP9808_I2C_ADDR_000, 0, SDA_GPIO, SCL_GPIO));
         ESP_ERROR_CHECK(mcp9808_init(&dev));
-
-        struct timeval now;
-        gettimeofday(&now, NULL);
-        int poweron_duration_msec = (now.tv_sec - poweron->tv_sec) *  1000 +
-                (now.tv_usec - poweron->tv_usec) / 1000;
-
-        // mcp9808 needs 250ms to perform measurement
-        int measurement_delay = (250 * 1.2) ;
-        if (poweron_duration_msec <  measurement_delay)
-                vTaskDelay((measurement_delay - poweron_duration_msec) / portTICK_RATE_MS);
 
         float temperature = 0;
         esp_err_t res = mcp9808_get_temperature(&dev, &temperature, NULL, NULL, NULL);
 
-        // gpio_set_level(PWR_GPIO, 0); // power-off sensor module
+        struct timeval now;
+        gettimeofday(&now, NULL);
+        int poweron_duration_msec = (now.tv_sec - poweron->tv_sec) *  1000 + (now.tv_usec - poweron->tv_usec) / 1000;
+
+        // mcp9808 needs 250ms to perform measurement
+        const int measurement_delay_msec = 250 * 1.2; // +20% tolerance
+        if (poweron_duration_msec <  measurement_delay_msec)
+                vTaskDelay((measurement_delay_msec - poweron_duration_msec) / portTICK_RATE_MS);
+
+        gpio_set_level(PWR_GPIO, 0); // power-off sensor module
 
         if (res == ESP_OK) {
                 ESP_LOGI(TAG, "Temperature: %.2f°C", temperature);
@@ -161,9 +158,12 @@ void app_main()
 
         log_init();
 
-        gpio_set_direction(PWR_GPIO, GPIO_MODE_OUTPUT);
-        gpio_set_level(PWR_GPIO, 1); // power-on sensor module
-
+        gpio_config_t cfg = {
+                .pin_bit_mask = BIT(PWR_GPIO),
+                .mode = GPIO_MODE_OUTPUT,
+        };
+        ESP_ERROR_CHECK(gpio_config(&cfg));
+        ESP_ERROR_CHECK(gpio_set_level(PWR_GPIO, 1)); // power-on sensor module
         struct timeval poweron;
         gettimeofday(&poweron, NULL);
 
