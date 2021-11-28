@@ -1,0 +1,8 @@
+
+* MAC list
+  1. 84:cc:a8:ac:23:bd
+  2. 5c:cf:7f:1b:40:11
+
+
+* howto install
+  ../scripts/install-ota $mac
