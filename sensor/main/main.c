@@ -186,9 +186,6 @@ void app_main()
 
         vTaskDelay(200 / portTICK_RATE_MS); // TODO: better wait for send completion
 
-        int sleep = 5 * 60;
-        ESP_LOGD(TAG, "deep sleep for %d seconds", sleep);
         ESP_ERROR_CHECK(wifi_disconnect());
-        esp_deep_sleep(sleep * 1000000);
-
+        esp_deep_sleep(5 * 60 * 1000000);
 }
