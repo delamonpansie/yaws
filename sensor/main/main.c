@@ -28,6 +28,10 @@ static const char* TAG = "undefined";
 #define SCL_GPIO GPIO_NUM_5  // pin D1
 #define PWR_GPIO GPIO_NUM_13 // pin D7
 
+#if CONFIG_NEWLIB_NANO_FORMAT
+# error newlib nano format library does not support formatting floats
+#endif
+
 static float system_vdd()
 {
         uint16_t adc_data;
