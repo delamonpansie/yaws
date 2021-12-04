@@ -40,7 +40,8 @@ static float system_vdd()
         if (err == ESP_OK)  {
                 float offset = 4.85;  // should be 5 actually (100kOhm + 220kOhm + 180kOhm) / 100 kOhm
                 float vdd = (float)adc_data / 1000 * offset;
-                ESP_LOGI(TAG, "Voltage: %0.2fV", vdd);
+                if (vdd > 0.5)
+                        ESP_LOGI(TAG, "Voltage: %0.2fV", vdd);
                 return vdd;
         }
         ESP_LOGE(TAG, "adc_read: failed %d", err);
