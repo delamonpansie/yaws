@@ -1,7 +1,10 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "driver/adc.h"
+#include "driver/i2c.h"
 #include "driver/gpio.h"
+
 #include "esp_event.h"
 #include "esp_https_ota.h"
 #include "esp_log.h"
@@ -9,8 +12,8 @@
 #include "esp_ota_ops.h"
 #include "esp_sleep.h"
 #include "esp_system.h"
-#include "driver/adc.h"
 #include "nvs_flash.h"
+#include "nvs.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -114,22 +117,109 @@ static void read_mcp9808(struct timeval *poweron)
         }
 }
 
-
-static int sensor_type()
+static uint8_t i2c_addr_detect()
 {
-        static RTC_DATA_ATTR char cached_type;
-        if ((cached_type & 0x80) == 0) {
-                gpio_config_t cfg = {
-                        .pin_bit_mask = BIT(GPIO_NUM_12)|BIT(GPIO_NUM_14), // pin D6, pin D5
-                        .mode = GPIO_MODE_INPUT,
-                        .pull_up_en = GPIO_PULLUP_ENABLE,
-                };
-                ESP_ERROR_CHECK(gpio_config(&cfg));
-                cached_type = 0x80|gpio_get_level(GPIO_NUM_12)<<1|gpio_get_level(GPIO_NUM_14);
-                cfg.pull_up_en = GPIO_PULLUP_DISABLE;
-                ESP_ERROR_CHECK(gpio_config(&cfg));
+        uint8_t addr_list[] = { BMP280_I2C_ADDRESS_1, MCP9808_I2C_ADDR_000, 0x80 };
+
+        i2c_config_t i2c = {
+                .mode = I2C_MODE_MASTER,
+                .sda_io_num = SDA_GPIO,
+                .scl_io_num = SCL_GPIO,
+                // sensors have pullups installed
+        };
+
+        esp_err_t res;
+
+#if HELPER_TARGET_IS_ESP32
+        i2c.master.clk_speed = I2C_FREQ_HZ;
+        ESP_ERROR_CHECK(i2c_param_config(I2C_PORT, &i2c));
+        if ((res = i2c_driver_install(I2C_PORT, i2c.mode, 0, 0, 0)) != ESP_OK)
+            return 0x80;
+#endif
+#if HELPER_TARGET_IS_ESP8266
+#if HELPER_TARGET_VERSION > HELPER_TARGET_VERSION_ESP8266_V3_2
+        // Clock Stretch time, depending on CPU frequency
+        i2c.clk_stretch_tick = I2CDEV_MAX_STRETCH_TIME;
+#endif
+        if ((res = i2c_driver_install(I2C_PORT, i2c.mode)) != ESP_OK)
+            return 0x80;
+        ESP_ERROR_CHECK(i2c_param_config(I2C_PORT, &i2c));
+#endif
+        int result = 0x80; // return 0x80 in case of errror, no valid i2c addr can have highest bit set
+        for (uint8_t *addr = addr_list; *addr != 0x80; addr++) {
+                i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+                ESP_ERROR_CHECK(i2c_master_start(cmd));
+                ESP_ERROR_CHECK(i2c_master_write_byte(cmd, *addr << 1, true));
+                ESP_ERROR_CHECK(i2c_master_stop(cmd));
+                esp_err_t check = i2c_master_cmd_begin(I2C_PORT, cmd, pdMS_TO_TICKS(CONFIG_I2CDEV_TIMEOUT));
+                i2c_cmd_link_delete(cmd);
+
+                if (check == ESP_OK) {
+                        ESP_LOGI(TAG, "detected I2C sensor with 0x%02x addr", *addr);
+                        result = *addr;
+                        break;
+                }
         }
-        return cached_type & 0x7f;
+
+        ESP_ERROR_CHECK(i2c_driver_delete(I2C_PORT));
+        return result;
+}
+
+static esp_err_t i2c_addr_store(uint8_t addr)
+{
+        nvs_handle_t nvs;
+        esp_err_t err;
+        if ((err = nvs_open(TAG, NVS_READWRITE, &nvs)) != ESP_OK)
+                goto out;
+        if (addr == 0x80)
+                err = nvs_erase_key(nvs, "i2c_addr");
+        else
+                err = nvs_set_u8(nvs, "i2c_addr", addr);
+        if (err != ESP_OK)
+                goto out;
+        err = nvs_commit(nvs);
+out:
+        nvs_close(nvs);
+        return err;
+}
+
+static esp_err_t i2c_addr_load(uint8_t *addr)
+{
+        nvs_handle_t nvs;
+        esp_err_t err;
+        if ((err = nvs_open(TAG, NVS_READONLY, &nvs)) != ESP_OK)
+                return err;
+        err = nvs_get_u8(nvs, "i2c_addr", addr);
+        nvs_close(nvs);
+        return err;
+}
+
+static uint8_t i2c_addr()
+{
+        uint8_t addr;
+        esp_err_t err;
+
+        err = i2c_addr_load(&addr);
+        if (err == ESP_OK) {
+                ESP_LOGI(TAG, "loaded I2C sensor addr 0x%02x from NVS", addr);
+                return addr;
+        }
+
+        ESP_LOGE(TAG, "failed to load i2c_addr from NVS: %s", esp_err_to_name(err));
+
+        addr = i2c_addr_detect();
+        if (addr == 0x80) {
+                ESP_LOGI(TAG, "failed to detect I2C sensor");
+                return addr;
+        }
+
+        if (err == ESP_ERR_NVS_NOT_FOUND) {
+                err = i2c_addr_store(addr);
+                if (err != ESP_OK)
+                        ESP_LOGE(TAG, "failed to store i2c_addr to NVS: %s", esp_err_to_name(err));
+        }
+
+        return addr;
 }
 
 void app_main()
@@ -173,22 +263,32 @@ void app_main()
         struct timeval poweron;
         gettimeofday(&poweron, NULL);
 
+
         // connect to WiFi before anything else. OTA must run _before_ any potentially buggy code
         if (wifi_connect() != ESP_OK)
                 goto sleep;
 
         if (ota() == ESP_OK) {
+                // force I2C redetection on OTA
+                uint8_t addr = i2c_addr_detect();
+                if (addr != 0x80)
+                        i2c_addr_store(addr);
+
                 vTaskDelay(100 / portTICK_RATE_MS);
                 esp_restart();
         }
 
         graphite_init();
 
-        switch (sensor_type()) {
-        case 1: read_bme280(&poweron); break;
-        case 2: read_mcp9808(&poweron); break;
+        uint8_t addr = i2c_addr();
+        switch (addr) {
+        case BMP280_I2C_ADDRESS_1: read_bme280(&poweron); break;
+        case MCP9808_I2C_ADDR_000: read_mcp9808(&poweron); break;
+        case 0x80:
+                ESP_LOGE(TAG, "unable to find I2C sensor");
+                break;
         default:
-                ESP_LOGI(TAG, "unknown sensor type %d", sensor_type());
+                ESP_LOGE(TAG, "unknown sensor addr 0x%02x", addr);
         }
 
         gpio_set_level(PWR_GPIO, 0); // power-off sensor module
