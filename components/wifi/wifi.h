@@ -8,3 +8,4 @@ esp_err_t wifi_connect(void);
 esp_err_t wifi_disconnect(void);
 int wifi_connected(void);
 char *macstr(const char *prefix, const char *suffix);
+esp_err_t ota();

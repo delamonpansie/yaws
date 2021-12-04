@@ -173,7 +173,14 @@ void app_main()
         gettimeofday(&poweron, NULL);
 
         // connect to WiFi before anything else. OTA must run _before_ any potentially buggy code
-        wifi_connect();
+        if (wifi_connect() != ESP_OK)
+                goto sleep;
+
+        if (ota() == ESP_OK) {
+                vTaskDelay(100 / portTICK_RATE_MS);
+                esp_restart();
+        }
+
         graphite_init();
 
         switch (sensor_type()) {
@@ -186,7 +193,9 @@ void app_main()
         gpio_set_level(PWR_GPIO, 0); // power-off sensor module
 
         vTaskDelay(200 / portTICK_RATE_MS); // TODO: better wait for send completion
-
         ESP_ERROR_CHECK(wifi_disconnect());
+
+sleep:
+        ESP_LOGI(TAG, "deep sleep");
         esp_deep_sleep(5 * 60 * 1000000);
 }

@@ -142,7 +142,7 @@ out:
 # error CONFIG_PARTITION_TABLE_TWO_OTA is required for OTA support
 #endif
 
-static void ota()
+esp_err_t ota()
 {
         char *url = NULL;
 
@@ -150,7 +150,7 @@ static void ota()
         // If you want to force OTA: do a power cycle (reset is not enough).
         static RTC_DATA_ATTR char ota_disabled;
         if (ota_disabled == 0x13)
-                return;
+                return ESP_ERR_NOT_SUPPORTED;
         ota_disabled = 0x13;
 
 #ifdef BOOTP_OTA
@@ -164,22 +164,22 @@ static void ota()
                 url = ota_url(ota_base);
 
         if (url == NULL || url == ota_same_version)
-                return;
+                return ESP_ERR_NOT_SUPPORTED;
 
         ESP_LOGI(TAG, "OTA %s", url);
         esp_err_t ret = esp_https_ota(&(esp_http_client_config_t){.url = url, .method = HTTP_METHOD_GET});
         switch (ret) {
         case ESP_OK:
                 ESP_LOGI(TAG, "OTA completed successfully, rebooting");
-                vTaskDelay(100 / portTICK_RATE_MS);
-                esp_restart();
-        default:
-                ESP_LOGE(TAG, "Firmware upgrade failed");
-                return;
+                break;
         case ESP_ERR_NOT_FOUND:
                 ESP_LOGI(TAG, "Firmware not found");
-                return;
+                break;
+        default:
+                ESP_LOGE(TAG, "Firmware upgrade failed");
+                break;
         }
+        return ret;
 }
 
 esp_err_t wifi_connect(void)
@@ -214,11 +214,9 @@ esp_err_t wifi_connect(void)
 
         EventBits_t bits = xEventGroupWaitBits(status, BIT(1)|BIT(2), true, false, 10000 / portTICK_RATE_MS);
         if ((bits & BIT(1)) == 0) {
-                ESP_LOGE(TAG, "Wi-Fi connction failed");
-                esp_deep_sleep(10 * 1000000);
+                ESP_LOGE(TAG, "Wi-Fi failed to connect");
+                return ESP_ERR_WIFI_NOT_CONNECT;
         }
-
-        ota();
 
         return ESP_OK;
 }
