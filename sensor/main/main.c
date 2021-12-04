@@ -24,6 +24,7 @@
 
 static const char* TAG = "undefined";
 
+#define I2C_PORT 0
 #define SDA_GPIO GPIO_NUM_4  // pin D2
 #define SCL_GPIO GPIO_NUM_5  // pin D1
 #define PWR_GPIO GPIO_NUM_13 // pin D7
@@ -53,7 +54,7 @@ static void read_bme280(struct timeval *poweron __attribute__(()))
         bmp280_t dev;
         memset(&dev, 0, sizeof(bmp280_t));
 
-        ESP_ERROR_CHECK(bmp280_init_desc(&dev, BMP280_I2C_ADDRESS_1, 0, SDA_GPIO, SCL_GPIO));
+        ESP_ERROR_CHECK(bmp280_init_desc(&dev, BMP280_I2C_ADDRESS_1, I2C_PORT, SDA_GPIO, SCL_GPIO));
         ESP_ERROR_CHECK(bmp280_init(&dev, &params));
 
         bool busy;
@@ -81,7 +82,7 @@ static void read_bme280(struct timeval *poweron __attribute__(()))
 static void read_mcp9808(struct timeval *poweron)
 {
         i2c_dev_t dev = {.port = 0};
-        ESP_ERROR_CHECK(mcp9808_init_desc(&dev, MCP9808_I2C_ADDR_000, 0, SDA_GPIO, SCL_GPIO));
+        ESP_ERROR_CHECK(mcp9808_init_desc(&dev, MCP9808_I2C_ADDR_000, I2C_PORT, SDA_GPIO, SCL_GPIO));
         ESP_ERROR_CHECK(mcp9808_init(&dev));
 
         float temperature = 0;
