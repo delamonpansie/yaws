@@ -205,8 +205,6 @@ static uint8_t i2c_addr()
                 return addr;
         }
 
-        ESP_LOGE(TAG, "failed to load i2c_addr from NVS: %s", esp_err_to_name(err));
-
         addr = i2c_addr_detect();
         if (addr == 0x80) {
                 ESP_LOGI(TAG, "failed to detect I2C sensor");
@@ -217,6 +215,8 @@ static uint8_t i2c_addr()
                 err = i2c_addr_store(addr);
                 if (err != ESP_OK)
                         ESP_LOGE(TAG, "failed to store i2c_addr to NVS: %s", esp_err_to_name(err));
+        } else {
+                ESP_LOGE(TAG, "failed to load i2c_addr from NVS: %s", esp_err_to_name(err));
         }
 
         return addr;
