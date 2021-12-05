@@ -65,7 +65,7 @@ static void sensor()
 }
 
 
-RTC_DATA_ATTR char saved_etag[16] = {0};
+volatile char RTC_DATA_ATTR saved_etag[16] = {0};
 
 uint8_t *get(const char *url, unsigned *len)
 {

@@ -142,16 +142,17 @@ out:
 # error CONFIG_PARTITION_TABLE_TWO_OTA is required for OTA support
 #endif
 
+volatile int RTC_DATA_ATTR ota_disabled;
+
 esp_err_t ota()
 {
         char *url = NULL;
 
         // OTA source is checked only once after boot to save power.
         // If you want to force OTA: do a power cycle (reset is not enough).
-        static RTC_DATA_ATTR char ota_disabled;
-        if (ota_disabled == 0x13)
+        if (ota_disabled == 0x13131313)
                 return ESP_ERR_NOT_SUPPORTED;
-        ota_disabled = 0x13;
+        ota_disabled = 0x13131313;
 
 #ifdef BOOTP_OTA
         if (memcmp(bootp, "http://", 7) == 0)
