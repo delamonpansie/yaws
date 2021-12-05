@@ -201,7 +201,7 @@ static uint8_t i2c_addr()
 
         err = i2c_addr_load(&addr);
         if (err == ESP_OK) {
-                ESP_LOGI(TAG, "loaded I2C sensor addr 0x%02x from NVS", addr);
+                ESP_LOGD(TAG, "loaded I2C sensor addr 0x%02x from NVS", addr);
                 return addr;
         }
 
@@ -277,8 +277,6 @@ void app_main()
                 vTaskDelay(100 / portTICK_RATE_MS);
                 esp_restart();
         }
-
-        graphite_init();
 
         uint8_t addr = i2c_addr();
         switch (addr) {

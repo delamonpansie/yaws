@@ -57,15 +57,44 @@ static char *format(const char *prefix, const char **metric, float *value, int *
 static int sock = -1;
 static struct sockaddr_in addr;
 
+static esp_err_t graphite_init()
+{
+        addr = (struct sockaddr_in) {
+                .sin_family = AF_INET,
+                .sin_addr = (struct in_addr){
+                        .s_addr = inet_addr(CONFIG_GRAPHITE_ADDR),
+                },
+                .sin_port = htons(2003)
+        };
+
+        if (addr.sin_addr.s_addr == INADDR_NONE) {
+                ESP_LOGE(TAG, "Invalid graphite address: %s", CONFIG_GRAPHITE_ADDR);
+                return ESP_FAIL;
+        }
+
+        sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
+        if (sock < 0) {
+                ESP_LOGE(TAG, "Unable to create socket: errno %d", errno);
+                return ESP_FAIL;
+        }
+
+        return ESP_OK;
+}
+
 esp_err_t graphite(const char *prefix, const char **metric, float *value)
 {
-        if (sock < 0)
-                return ESP_FAIL;
+        if (sock < 0) {
+                esp_err_t err = graphite_init();
+                if (err != ESP_OK)
+                        return err;
+        }
 
         int msglen = 0;
         char *msg = format(prefix, metric, value, &msglen);
-        if (msg == NULL)
+        if (msg == NULL) {
+                ESP_LOGI(TAG, "Formatting failed");
                 return ESP_FAIL;
+        }
 
         int n;
         for (int i = 0; i < 5; i++) {
@@ -83,30 +112,5 @@ esp_err_t graphite(const char *prefix, const char **metric, float *value)
 
         if (n != msglen)
                 return ESP_FAIL;
-        return ESP_OK;
-}
-
-
-esp_err_t graphite_init()
-{
-        struct sockaddr_in addr = {
-                .sin_family = AF_INET,
-                .sin_addr = (struct in_addr){
-                        .s_addr = inet_addr(CONFIG_GRAPHITE_ADDR),
-                },
-                .sin_port = htons(2003)
-        };
-
-        if (addr.sin_addr.s_addr == INADDR_NONE) {
-                ESP_LOGE(TAG, "Invalid graphite address: %s", CONFIG_GRAPHITE_ADDR);
-                return ESP_FAIL;
-        }
-
-        int sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
-        if (sock < 0) {
-                ESP_LOGE(TAG, "Unable to create socket: errno %d", errno);
-                return ESP_FAIL;
-        }
-
         return ESP_OK;
 }
