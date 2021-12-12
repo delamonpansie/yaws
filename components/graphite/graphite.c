@@ -54,9 +54,12 @@ static char *format(const char *prefix, const char **metric, float *value, int *
         return buf;
 }
 
-esp_err_t graphite(const char *prefix, const char **metric, float *value)
+static int sock = -1;
+static struct sockaddr_in addr;
+
+static esp_err_t graphite_init()
 {
-        struct sockaddr_in addr = {
+        addr = (struct sockaddr_in) {
                 .sin_family = AF_INET,
                 .sin_addr = (struct in_addr){
                         .s_addr = inet_addr(CONFIG_GRAPHITE_ADDR),
@@ -69,15 +72,21 @@ esp_err_t graphite(const char *prefix, const char **metric, float *value)
                 return ESP_FAIL;
         }
 
-        int sock = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
+        sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
         if (sock < 0) {
                 ESP_LOGE(TAG, "Unable to create socket: errno %d", errno);
                 return ESP_FAIL;
         }
 
-        if (connect(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-                ESP_LOGE(TAG, "Unable to connect socket: errno %d", errno);
-                return ESP_FAIL;
+        return ESP_OK;
+}
+
+esp_err_t graphite(const char *prefix, const char **metric, float *value)
+{
+        if (sock < 0) {
+                esp_err_t err = graphite_init();
+                if (err != ESP_OK)
+                        return err;
         }
 
         int msglen = 0;
@@ -87,19 +96,21 @@ esp_err_t graphite(const char *prefix, const char **metric, float *value)
                 return ESP_FAIL;
         }
 
-        int offt = 0;
-        do {
-                int n = send(sock, msg + offt, msglen - offt, 0);
-                ESP_LOGD(TAG, "Sent %d bytes", n);
-                if (n < 0)
+        int n;
+        for (int i = 0; i < 5; i++) {
+                n = sendto(sock, msg, msglen, 0, (struct sockaddr *)&addr, sizeof addr);
+                ESP_LOGD(TAG, "Sent %d bytes, message='%.*s'", n, msglen, msg);
+                if (n == msglen)
                         break;
-                offt += n;
-        } while (offt < msglen);
+                ESP_LOGE(TAG, "Failed to send UDP datagram: errno %d, try %d", errno, i);
+                vTaskDelay(200 / portTICK_RATE_MS);
+        }
+        if (n != msglen)
+                ESP_LOGE(TAG, "Failed to send UDP datagram: errno %d", errno);
 
         free(msg);
-        close(sock);
 
-        if (offt != msglen)
+        if (n != msglen)
                 return ESP_FAIL;
         return ESP_OK;
 }
