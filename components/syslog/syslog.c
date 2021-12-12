@@ -132,6 +132,10 @@ void log_task(void *arg)
                 len = trim_color_escape_seq(msg, len);
                 msg[len] = 0;
 
+                // ignore "wifi E (238) timer:0x3ffe9a24 cb is null" messages
+                if (strstr(msg, "wifi") && strstr(msg, "cb is null"))
+                        continue;
+
                 int header_len = 0;
                 unsigned tick;
                 int n = sscanf(msg, "%*[EWIDV] (%u) %15[^:]: %n", &tick, tag, &header_len);
