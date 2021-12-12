@@ -97,20 +97,14 @@ esp_err_t graphite(const char *prefix, const char **metric, float *value)
         }
 
         int n;
-        for (int i = 0; i < 5; i++) {
+        for (;;) {
                 n = sendto(sock, msg, msglen, 0, (struct sockaddr *)&addr, sizeof addr);
                 ESP_LOGD(TAG, "Sent %d bytes, message='%.*s'", n, msglen, msg);
                 if (n == msglen)
                         break;
-                ESP_LOGE(TAG, "Failed to send UDP datagram: errno %d, try %d", errno, i);
-                vTaskDelay(200 / portTICK_RATE_MS);
+                vTaskDelay(250 / portTICK_RATE_MS);
         }
-        if (n != msglen)
-                ESP_LOGE(TAG, "Failed to send UDP datagram: errno %d", errno);
-
         free(msg);
 
-        if (n != msglen)
-                return ESP_FAIL;
         return ESP_OK;
 }

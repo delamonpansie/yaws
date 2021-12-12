@@ -43,8 +43,6 @@ static float system_vdd()
         if (err == ESP_OK)  {
                 float offset = 4.85;  // should be 5 actually (100kOhm + 220kOhm + 180kOhm) / 100 kOhm
                 float vdd = (float)adc_data / 1000 * offset;
-                if (vdd > 0.5)
-                        ESP_LOGI(TAG, "Voltage: %0.2fV", vdd);
                 return vdd;
         }
         ESP_LOGE(TAG, "adc_read: failed %d", err);
@@ -77,10 +75,12 @@ static void read_bme280(struct timeval *poweron __attribute__(()))
                 return;
         }
 
-        ESP_LOGI(TAG, "Temperature: %.2f, pressure: %.2f, humidity: %.2f", temperature, pressure, humidity);
-        graphite(macstr("yaws.sensor_", ""),
-                 (const char*[]){"temperature", "pressure", "humidity", "voltage", NULL},
-                 (const float[]){temperature, pressure, humidity, system_vdd()});
+        float vdd = system_vdd();
+        const char *metric[] = {"temperature", "pressure", "humidity", vdd > 0.5 ? "voltage" : NULL, NULL};
+        const float value[] = {temperature, pressure, humidity, vdd};
+
+        graphite(macstr("yaws.sensor_", ""), metric, value);
+        ESP_LOGI(TAG, "temperature: %.2f°C, pressure: %.2fPa, humidity: %.2f%%, voltage: %0.2fV", temperature, pressure, humidity, vdd);
 }
 
 static void read_mcp9808(struct timeval *poweron)
@@ -104,14 +104,12 @@ static void read_mcp9808(struct timeval *poweron)
         gpio_set_level(PWR_GPIO, 0); // power-off sensor module
 
         if (res == ESP_OK) {
-                ESP_LOGI(TAG, "Temperature: %.2f°C", temperature);
-
-                const char *metric[] = {"temperature", "voltage", NULL};
-                const float value[] = {temperature, system_vdd() };
-                if (value[1] < 0.5) // ADC is not connected, do not send vdd measurment
-                        metric[1] = NULL;
+                float vdd = system_vdd();
+                const char *metric[] = {"temperature", vdd > 0.5 ? "voltage": NULL, NULL};
+                const float value[] = {temperature, vdd };
 
                 graphite(macstr("yaws.sensor_", ""), metric, value);
+                ESP_LOGI(TAG, "temperature: %.2f°C, voltage: %0.2fV", temperature, vdd);
         } else {
                 ESP_LOGE(TAG, "Could not get results: %d (%s)", res, esp_err_to_name(res));
         }
@@ -291,7 +289,7 @@ void app_main()
 
         gpio_set_level(PWR_GPIO, 0); // power-off sensor module
 
-        vTaskDelay(200 / portTICK_RATE_MS); // TODO: better wait for send completion
+        vTaskDelay(1000 / portTICK_RATE_MS); // TODO: better wait for send completion
         ESP_ERROR_CHECK(wifi_disconnect());
 
 sleep:
