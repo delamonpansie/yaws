@@ -220,6 +220,8 @@ static uint8_t i2c_addr()
         return addr;
 }
 
+volatile int RTC_DATA_ATTR ota_disabled;
+
 void app_main()
 {
         const esp_app_desc_t *app_desc = esp_ota_get_app_description();
@@ -266,14 +268,22 @@ void app_main()
         if (wifi_connect() != ESP_OK)
                 goto sleep;
 
-        if (ota() == ESP_OK) {
-                // force I2C redetection on OTA
-                uint8_t addr = i2c_addr_detect();
-                if (addr != 0x80)
-                        i2c_addr_store(addr);
+        // OTA source is checked only once after boot to save power.
+        // If you want to force OTA: do a power cycle (reset is not enough).
+        if (ota_disabled != 0x13131313) {
+                char updated = 0;
+                esp_err_t err = ota(&updated);
+                if (err == ESP_OK)
+                        ota_disabled = 0x13131313;
+                if (updated) {
+                        // force I2C redetection on OTA
+                        uint8_t addr = i2c_addr_detect();
+                        if (addr != 0x80)
+                                i2c_addr_store(addr);
 
-                vTaskDelay(100 / portTICK_RATE_MS);
-                esp_restart();
+                        vTaskDelay(100 / portTICK_RATE_MS);
+                        esp_restart();
+                }
         }
 
         uint8_t addr = i2c_addr();
