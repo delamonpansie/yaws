@@ -27,7 +27,7 @@ const int facility = CONFIG_SYSLOG_FACILITY;
 
 #define SIZE 512
 
-static int trim_color_escape_seq(char *msg, int len)
+static int trim_color_escape_seq_and_newline(char *msg, int len)
 {
         char *w = msg, *r = msg, *end = msg + len;
         while (r < end) {
@@ -45,6 +45,10 @@ static int trim_color_escape_seq(char *msg, int len)
                     r[2] == '0' &&
                     r[3] == 'm') {
                         r += 4;
+                        continue;
+                }
+                if (r[0] == '\n') {
+                        r++;
                         continue;
                 }
                 *w++ = *r++;
@@ -103,6 +107,7 @@ static int syslog_vprintf(const char *fmt, va_list va)
 }
 #endif
 
+char syslog_last_err[32];
 static void syslog_task(void *arg)
 {
         char msg[SIZE+1], tag[32], header[64];
@@ -129,7 +134,7 @@ static void syslog_task(void *arg)
                 size_t len = xMessageBufferReceive(msgbuf, msg, sizeof msg - 1, portMAX_DELAY);
                 assert(len != 0);
 
-                len = trim_color_escape_seq(msg, len);
+                len = trim_color_escape_seq_and_newline(msg, len);
                 msg[len] = 0;
 
                 // ignore "wifi E (238) timer:0x3ffe9a24 cb is null" messages
@@ -145,6 +150,13 @@ static void syslog_task(void *arg)
                         iov[0].iov_len = snprintf(header, sizeof header,
                                                   "<%d> %s %c (%u) ",
                                                   facility * 8 + prio, tag, *msg, tick);
+                        if (prio <= 4) {
+                                int errlen = len - header_len;
+                                if (errlen >= sizeof syslog_last_err)
+                                        errlen = sizeof syslog_last_err - 1;
+                                memcpy(syslog_last_err, msg + header_len, errlen);
+                                syslog_last_err[errlen] = 0;
+                        }
                 } else {
                         iov[0].iov_len = snprintf(header, sizeof header, "<%d> ", facility * 8 + 6);
                 }

@@ -221,6 +221,7 @@ static uint8_t i2c_addr()
 }
 
 volatile int RTC_DATA_ATTR ota_disabled;
+volatile char RTC_DATA_ATTR last_err[32];
 
 void app_main()
 {
@@ -253,6 +254,10 @@ void app_main()
 #endif // CONFIG_PM_ENABLE
 
         syslog_init();
+        if (last_err[0] != 0) {
+                ESP_LOGE(TAG, "prev err: %s", last_err);
+                last_err[0] = 0;
+        }
 
         gpio_config_t cfg = {
                 .pin_bit_mask = BIT(PWR_GPIO),
@@ -302,7 +307,10 @@ void app_main()
         vTaskDelay(1000 / portTICK_RATE_MS); // TODO: better wait for send completion
         ESP_ERROR_CHECK(wifi_disconnect());
 
+        // clear error: everything went as expected
+        last_err[0] = 0;
 sleep:
         ESP_LOGI(TAG, "deep sleep");
+        memcpy((char *)last_err, syslog_last_err, sizeof(last_err));
         esp_deep_sleep(5 * 60 * 1000000);
 }
