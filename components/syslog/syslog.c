@@ -82,7 +82,7 @@ static int syslog_putchar(int ch)
 
         if (old_putchar != NULL)
                 return old_putchar(ch);
-        return 0;
+        return ch;
 }
 #elif defined(CONFIG_IDF_TARGET_ESP32)
 static int syslog_vprintf(const char *fmt, va_list va)
@@ -99,7 +99,7 @@ static int syslog_vprintf(const char *fmt, va_list va)
 
         if (old_vprintf != NULL)
                 return old_vprintf(fmt, va);
-        return 0;
+        return len;
 }
 #endif
 
