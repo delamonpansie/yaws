@@ -1,4 +1,4 @@
 #pragma once
 
-void log_early_init();
-void log_init();
+void syslog_early_init();
+void syslog_init();

@@ -224,7 +224,7 @@ void app_main()
 {
         const esp_app_desc_t *app_desc = esp_ota_get_app_description();
         TAG = app_desc->project_name;
-        log_early_init();
+        syslog_early_init();
 
         esp_log_level_set("*", ESP_LOG_ERROR);
         esp_log_level_set("esp_https_ota", ESP_LOG_INFO);
@@ -250,7 +250,7 @@ void app_main()
         ESP_ERROR_CHECK( esp_pm_configure(&pm_config) );
 #endif // CONFIG_PM_ENABLE
 
-        log_init();
+        syslog_init();
 
         gpio_config_t cfg = {
                 .pin_bit_mask = BIT(PWR_GPIO),

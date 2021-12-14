@@ -27,7 +27,7 @@ const int facility = CONFIG_SYSLOG_FACILITY;
 
 #define SIZE 512
 
-int trim_color_escape_seq(char *msg, int len)
+static int trim_color_escape_seq(char *msg, int len)
 {
         char *w = msg, *r = msg, *end = msg + len;
         while (r < end) {
@@ -65,7 +65,7 @@ static int decode_prio(char ch)
 }
 
 #if defined(CONFIG_IDF_TARGET_ESP8266)
-static int log_putchar(int ch)
+static int syslog_putchar(int ch)
 {
         static char buf[SIZE], *wptr = buf;
 
@@ -85,7 +85,7 @@ static int log_putchar(int ch)
         return 0;
 }
 #elif defined(CONFIG_IDF_TARGET_ESP32)
-static int log_vprintf(const char *fmt, va_list va)
+static int syslog_vprintf(const char *fmt, va_list va)
 {
         char *buf;
         int len = vasprintf(&buf, fmt, va);
@@ -103,7 +103,7 @@ static int log_vprintf(const char *fmt, va_list va)
 }
 #endif
 
-void log_task(void *arg)
+static void syslog_task(void *arg)
 {
         char msg[SIZE+1], tag[32], header[64];
 
@@ -162,7 +162,7 @@ void log_task(void *arg)
         }
 }
 
-void log_early_init()
+void syslog_early_init()
 {
         if (strlen(CONFIG_SYSLOG_ADDR) == 0) {
                 ESP_LOGE(TAG, "syslog address is not configured, logging is disabled");
@@ -181,20 +181,20 @@ void log_early_init()
                 return;
         }
 
-        xTaskCreate(&log_task, "log", 8192, NULL, 5, NULL);
+        xTaskCreate(&syslog_task, "log", 8192, NULL, 5, NULL);
 #if defined(CONFIG_IDF_TARGET_ESP8266)
-        old_putchar = esp_log_set_putchar(log_putchar);
+        old_putchar = esp_log_set_putchar(syslog_putchar);
 #elif defined(CONFIG_IDF_TARGET_ESP32)
-        old_vprintf = esp_log_set_vprintf(log_vprintf);
+        old_vprintf = esp_log_set_vprintf(syslog_vprintf);
 #endif
 
 
 }
 
-void log_init()
+void syslog_init()
 {
         if (msgbuf == NULL) {
-                log_early_init();
+                syslog_early_init();
                 if (msgbuf == NULL)
                         return;
         }
