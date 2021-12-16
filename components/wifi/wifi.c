@@ -208,7 +208,9 @@ esp_err_t wifi_connect(void)
 #elif defined(CONFIG_IDF_TARGET_ESP32)
         netif = esp_netif_create_default_wifi_sta();
 #endif
-        ESP_ERROR_CHECK(esp_wifi_connect());
+        esp_err_t err = esp_wifi_connect();
+        if (err != ESP_OK)
+                return err;
 
         EventBits_t bits = xEventGroupWaitBits(status, BIT(1)|BIT(2), true, false, 10000 / portTICK_RATE_MS);
         if ((bits & BIT(1)) == 0) {

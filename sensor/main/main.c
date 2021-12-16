@@ -303,13 +303,16 @@ void app_main()
 
         gpio_set_level(PWR_GPIO, 0); // power-off sensor module
 
-        vTaskDelay(5000 / portTICK_RATE_MS); // TODO: better wait for send completion
-        ESP_ERROR_CHECK(wifi_disconnect());
+        vTaskDelay(200 / portTICK_RATE_MS); // TODO: better wait for send completion
+
+        if (wifi_disconnect() != ESP_OK)
+                goto sleep;
 
         // clear error: everything went as expected
         last_err[0] = 0;
 sleep:
         ESP_LOGI(TAG, "deep sleep");
         memcpy((char *)last_err, syslog_last_err, sizeof(last_err));
+
         esp_deep_sleep(5 * 60 * 1000000);
 }
