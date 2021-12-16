@@ -304,7 +304,7 @@ void app_main()
 
         gpio_set_level(PWR_GPIO, 0); // power-off sensor module
 
-        vTaskDelay(1000 / portTICK_RATE_MS); // TODO: better wait for send completion
+        vTaskDelay(5000 / portTICK_RATE_MS); // TODO: better wait for send completion
         ESP_ERROR_CHECK(wifi_disconnect());
 
         // clear error: everything went as expected
