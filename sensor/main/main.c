@@ -296,7 +296,6 @@ void app_main()
         case BMP280_I2C_ADDRESS_1: read_bme280(&poweron); break;
         case MCP9808_I2C_ADDR_000: read_mcp9808(&poweron); break;
         case 0x80:
-                ESP_LOGE(TAG, "unable to find I2C sensor");
                 break;
         default:
                 ESP_LOGE(TAG, "unknown sensor addr 0x%02x", addr);
