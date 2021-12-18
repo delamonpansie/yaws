@@ -305,9 +305,6 @@ void app_main()
 
         vTaskDelay(200 / portTICK_RATE_MS); // TODO: better wait for send completion
 
-        if (wifi_disconnect() != ESP_OK)
-                goto sleep;
-
         // clear error: everything went as expected
         last_err[0] = 0;
 sleep:
