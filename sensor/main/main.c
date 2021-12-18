@@ -311,8 +311,9 @@ void app_main()
         // clear error: everything went as expected
         last_err[0] = 0;
 sleep:
-        ESP_LOGI(TAG, "deep sleep");
         memcpy((char *)last_err, syslog_last_err, sizeof(last_err));
 
-        esp_deep_sleep(5 * 60 * 1000000);
+        struct timeval now;
+        gettimeofday(&now, NULL);
+        esp_deep_sleep(5 * 60 * 1000000 - now.tv_sec * 1000000 - now.tv_usec - 500000);
 }
