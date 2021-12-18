@@ -41,7 +41,7 @@ static float system_vdd()
         uint16_t adc_data;
         esp_err_t err = adc_read(&adc_data);
         if (err == ESP_OK)  {
-                float offset = 4.85;  // should be 5 actually (100kOhm + 220kOhm + 180kOhm) / 100 kOhm
+                float offset = 5;  // (100kOhm + 220kOhm + 180kOhm) / 100 kOhm
                 float vdd = (float)adc_data / 1000 * offset;
                 return vdd;
         }
