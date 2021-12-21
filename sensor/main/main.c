@@ -303,7 +303,7 @@ void app_main()
 
         gpio_set_level(PWR_GPIO, 0); // power-off sensor module
 
-        vTaskDelay(200 / portTICK_RATE_MS); // TODO: better wait for send completion
+        vTaskDelay(100 / portTICK_RATE_MS); // TODO: better wait for send completion
 
         // clear error: everything went as expected
         last_err[0] = 0;
