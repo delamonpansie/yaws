@@ -303,7 +303,10 @@ void app_main()
 
         gpio_set_level(PWR_GPIO, 0); // power-off sensor module
 
-        vTaskDelay(100 / portTICK_RATE_MS); // TODO: better wait for send completion
+        unsigned send_wait_delay = 100 / portTICK_RATE_MS;
+        if (system_vdd() < 1)
+                send_wait_delay *= 5;
+        vTaskDelay(send_wait_delay); // TODO: better wait for send completion
 
         // clear error: everything went as expected
         last_err[0] = 0;
@@ -312,5 +315,9 @@ sleep:
 
         struct timeval now;
         gettimeofday(&now, NULL);
-        esp_deep_sleep(5 * 60 * 1000000 - now.tv_sec * 1000000 - now.tv_usec - 500000);
+        unsigned sleep_duration = 5 * 60 * 1000000;
+        if (system_vdd() < 1)
+                sleep_duration /= 5;
+
+        esp_deep_sleep(sleep_duration - now.tv_sec * 1000000 - now.tv_usec - 500000);
 }
