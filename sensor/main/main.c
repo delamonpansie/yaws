@@ -37,6 +37,35 @@ static const char* TAG = "undefined";
 #endif
 
 static float vdd;
+static void vdd_read()
+{
+        // WiFI and interrupts must be off, otherwise readings are noisy
+        // however, it is impossible to disable interrupts, because code
+        // in adc driver apperantly uses them
+        uint16_t adc_data;
+        esp_err_t err = adc_read(&adc_data);
+        if (err != ESP_OK)
+                return;
+
+        float offset = 5;  // (100kOhm + 220kOhm + 180kOhm) / 100 kOhm
+        struct {
+                uint8_t mac[6];
+                float offset;
+        } tab[] = {
+                #include "adc_offset_tab.h"
+                { .offset = 0 }
+        };
+
+        uint8_t mac[6];
+        esp_efuse_mac_get_default(mac);
+        for (int i = 0; tab[i].offset; i++) {
+                if (memcmp(mac, tab[i].mac, 6) == 0) {
+                        offset = tab[i].offset;
+                        break;
+                }
+        }
+        vdd = (float)adc_data / 1000 * offset;
+}
 
 static void read_bme280(struct timeval *poweron __attribute__(()))
 {
@@ -240,15 +269,7 @@ void app_main()
         ESP_ERROR_CHECK( esp_pm_configure(&pm_config) );
 #endif // CONFIG_PM_ENABLE
 
-        // ADC must be read with WiFI turned off, otherwise readings are noisy
-        // https://github.com/esp8266/Arduino/issues/2070
-        uint16_t adc_data;
-        esp_err_t err = adc_read(&adc_data);
-        if (err == ESP_OK)  {
-                float offset = 5;  // (100kOhm + 220kOhm + 180kOhm) / 100 kOhm
-                vdd = (float)adc_data / 1000 * offset;
-        }
-
+        vdd_read();
         syslog_init();
         if (last_err[0] != 0) {
                 ESP_LOGE(TAG, "prev err: %s", last_err);
