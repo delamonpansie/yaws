@@ -130,6 +130,12 @@ static void syslog_task(void *arg)
                 .msg_iovlen = 2
         };
 
+        while (sock < 0) {
+                if (xMessageBufferIsFull(msgbuf))
+                        xMessageBufferReceive(msgbuf, msg, sizeof msg - 1, portMAX_DELAY);
+                vTaskDelay(100 / portTICK_PERIOD_MS);
+        }
+
         while (1) {
                 size_t len = xMessageBufferReceive(msgbuf, msg, sizeof msg - 1, portMAX_DELAY);
                 assert(len != 0);
@@ -166,11 +172,8 @@ static void syslog_task(void *arg)
                 iov[1].iov_base = msg + header_len;
                 iov[1].iov_len = len - header_len;
 
-                while (sock < 0 || sendmsg(sock, &msghdr, 0) == -1) {
-                        if (xMessageBufferIsFull(msgbuf))
-                                break;
+                while (sendmsg(sock, &msghdr, 0) == -1)
                         vTaskDelay(100 / portTICK_PERIOD_MS);
-                }
         }
 }
 
@@ -193,7 +196,7 @@ void syslog_early_init()
                 return;
         }
 
-        xTaskCreate(&syslog_task, "log", 8192, NULL, 5, NULL);
+        xTaskCreate(&syslog_task, "log", 3072, NULL, 5, NULL);
 #if defined(CONFIG_IDF_TARGET_ESP8266)
         old_putchar = esp_log_set_putchar(syslog_putchar);
 #elif defined(CONFIG_IDF_TARGET_ESP32)
