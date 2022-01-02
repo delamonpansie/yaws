@@ -36,18 +36,7 @@ static const char* TAG = "undefined";
 # error newlib nano format library does not support formatting floats
 #endif
 
-static float system_vdd()
-{
-        uint16_t adc_data;
-        esp_err_t err = adc_read(&adc_data);
-        if (err == ESP_OK)  {
-                float offset = 5;  // (100kOhm + 220kOhm + 180kOhm) / 100 kOhm
-                float vdd = (float)adc_data / 1000 * offset;
-                return vdd;
-        }
-        ESP_LOGE(TAG, "adc_read: failed %d", err);
-        return 0;
-}
+static float vdd;
 
 static void read_bme280(struct timeval *poweron __attribute__(()))
 {
@@ -75,7 +64,6 @@ static void read_bme280(struct timeval *poweron __attribute__(()))
                 return;
         }
 
-        float vdd = system_vdd();
         const char *metric[] = {"temperature", "pressure", "humidity", vdd > 0.5 ? "voltage" : NULL, NULL};
         const float value[] = {temperature, pressure, humidity, vdd};
 
@@ -104,7 +92,6 @@ static void read_mcp9808(struct timeval *poweron)
         gpio_set_level(PWR_GPIO, 0); // power-off sensor module
 
         if (res == ESP_OK) {
-                float vdd = system_vdd();
                 const char *metric[] = {"temperature", vdd > 0.5 ? "voltage": NULL, NULL};
                 const float value[] = {temperature, vdd };
 
@@ -253,6 +240,15 @@ void app_main()
         ESP_ERROR_CHECK( esp_pm_configure(&pm_config) );
 #endif // CONFIG_PM_ENABLE
 
+        // ADC must be read with WiFI turned off, otherwise readings are noisy
+        // https://github.com/esp8266/Arduino/issues/2070
+        uint16_t adc_data;
+        esp_err_t err = adc_read(&adc_data);
+        if (err == ESP_OK)  {
+                float offset = 5;  // (100kOhm + 220kOhm + 180kOhm) / 100 kOhm
+                vdd = (float)adc_data / 1000 * offset;
+        }
+
         syslog_init();
         if (last_err[0] != 0) {
                 ESP_LOGE(TAG, "prev err: %s", last_err);
@@ -304,7 +300,7 @@ void app_main()
         gpio_set_level(PWR_GPIO, 0); // power-off sensor module
 
         unsigned send_wait_delay = 100 / portTICK_RATE_MS;
-        if (system_vdd() < 1)
+        if (vdd < 1)
                 send_wait_delay *= 5;
         vTaskDelay(send_wait_delay); // TODO: better wait for send completion
 
@@ -316,7 +312,7 @@ sleep:
         struct timeval now;
         gettimeofday(&now, NULL);
         unsigned sleep_duration = 5 * 60 * 1000000;
-        if (system_vdd() < 1)
+        if (vdd < 1)
                 sleep_duration /= 5;
 
         esp_deep_sleep(sleep_duration - now.tv_sec * 1000000 - now.tv_usec - 500000);
