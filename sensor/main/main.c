@@ -106,9 +106,6 @@ static void read_mcp9808(struct timeval *poweron)
         ESP_ERROR_CHECK(mcp9808_init_desc(&dev, MCP9808_I2C_ADDR_000, I2C_PORT, SDA_GPIO, SCL_GPIO));
         ESP_ERROR_CHECK(mcp9808_init(&dev));
 
-        float temperature = 0;
-        esp_err_t res = mcp9808_get_temperature(&dev, &temperature, NULL, NULL, NULL);
-
         struct timeval now;
         gettimeofday(&now, NULL);
         int poweron_duration_msec = (now.tv_sec - poweron->tv_sec) *  1000 + (now.tv_usec - poweron->tv_usec) / 1000;
@@ -117,6 +114,9 @@ static void read_mcp9808(struct timeval *poweron)
         const int measurement_delay_msec = 250 * 1.2; // +20% tolerance
         if (poweron_duration_msec <  measurement_delay_msec)
                 vTaskDelay((measurement_delay_msec - poweron_duration_msec) / portTICK_RATE_MS);
+
+        float temperature = 0;
+        esp_err_t res = mcp9808_get_temperature(&dev, &temperature, NULL, NULL, NULL);
 
         gpio_set_level(PWR_GPIO, 0); // power-off sensor module
 
