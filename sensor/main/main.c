@@ -330,6 +330,8 @@ void app_main()
 sleep:
         memcpy((char *)last_err, syslog_last_err, sizeof(last_err));
 
+        wifi_disconnect();
+
         struct timeval now;
         gettimeofday(&now, NULL);
         unsigned sleep_duration = 5 * 60 * 1000000;
