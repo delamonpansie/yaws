@@ -20,6 +20,7 @@
 
 #include <bmp280.h>
 #include <mcp9808.h>
+#include <adt7410.h>
 
 #include "syslog.h"
 #include "graphite.h"
@@ -131,9 +132,40 @@ static void read_mcp9808(struct timeval *poweron)
         }
 }
 
+static void read_adt7410(struct timeval *poweron)
+{
+        adt7410_t dev = {.i2c_dev = {.port = 0}};
+        ESP_ERROR_CHECK(adt7410_init_desc(&dev, ADT7410_I2C_ADDR_000, I2C_PORT, SDA_GPIO, SCL_GPIO));
+        ESP_ERROR_CHECK(adt7410_init(&dev, ADT7410_ONE_SHOT, ADT7410_RES_16));
+
+        struct timeval now;
+        gettimeofday(&now, NULL);
+        int poweron_duration_msec = (now.tv_sec - poweron->tv_sec) *  1000 + (now.tv_usec - poweron->tv_usec) / 1000;
+
+        // adt7410 needs 240ms to perform measurement
+        const int measurement_delay_msec = 240 * 1.2; // +20% tolerance
+        if (poweron_duration_msec <  measurement_delay_msec)
+                vTaskDelay((measurement_delay_msec - poweron_duration_msec) / portTICK_RATE_MS);
+
+        float temperature = 0;
+        esp_err_t res = adt7410_get_temperature(&dev, &temperature);
+
+        gpio_set_level(PWR_GPIO, 0); // power-off sensor module
+
+        if (res == ESP_OK) {
+                const char *metric[] = {"temperature", vdd > 0.5 ? "voltage": NULL, NULL};
+                const float value[] = {temperature, vdd };
+
+                graphite(macstr("yaws.sensor_", ""), metric, value);
+                ESP_LOGI(TAG, "temperature: %.2f°C, voltage: %0.2fV", temperature, vdd);
+        } else {
+                ESP_LOGE(TAG, "Could not get results: %d (%s)", res, esp_err_to_name(res));
+        }
+}
+
 static uint8_t i2c_addr_detect()
 {
-        uint8_t addr_list[] = { BMP280_I2C_ADDRESS_1, MCP9808_I2C_ADDR_000, 0x80 };
+        uint8_t addr_list[] = { BMP280_I2C_ADDRESS_1, MCP9808_I2C_ADDR_000, ADT7410_I2C_ADDR_000, 0x80 };
 
         i2c_config_t i2c = {
                 .mode = I2C_MODE_MASTER,
@@ -312,6 +344,7 @@ void app_main()
         switch (addr) {
         case BMP280_I2C_ADDRESS_1: read_bme280(&poweron); break;
         case MCP9808_I2C_ADDR_000: read_mcp9808(&poweron); break;
+        case ADT7410_I2C_ADDR_000: read_adt7410(&poweron); break;
         case 0x80:
                 break;
         default:
