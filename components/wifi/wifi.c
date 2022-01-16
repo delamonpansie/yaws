@@ -89,6 +89,7 @@ static void on_shutdown()
 #endif
 
 static char *ota_same_version = "same";
+static char *ota_not_found = "not_found";
 static char *ota_url(const char *base)
 {
         const esp_app_desc_t *app_desc = esp_ota_get_app_description();
@@ -110,6 +111,11 @@ static char *ota_url(const char *base)
         }
 
         int status_code = esp_http_client_get_status_code(client);
+        if (status_code == 404) {
+                ESP_LOGI(TAG, "OTA version %s not found", url);
+                result = ota_not_found;
+                goto out;
+        }
         if (status_code != 200) {
                 ESP_LOGE(TAG, "OTA version %s fetch failed: status code %d", url, status_code);
                 goto out;
@@ -159,8 +165,11 @@ esp_err_t ota(char *updated)
         if (url == ota_same_version)
                 return ESP_OK;
 
+        if (url == ota_not_found)
+                return ESP_ERR_NOT_FOUND;
+
         if (url == NULL)
-                return ESP_ERR_NOT_SUPPORTED;
+                return ESP_FAIL;
 
         ESP_LOGI(TAG, "OTA %s", url);
         esp_err_t ret = esp_https_ota(&(esp_http_client_config_t){.url = url, .method = HTTP_METHOD_GET});

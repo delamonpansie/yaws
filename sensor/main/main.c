@@ -321,7 +321,7 @@ void app_main()
         if (ota_disabled != 0x13131313) {
                 char updated = 0;
                 esp_err_t err = ota(&updated);
-                if (err == ESP_OK)
+                if (err == ESP_OK || err == ESP_ERR_NOT_FOUND)
                         ota_disabled = 0x13131313;
                 if (updated) {
                         // force I2C redetection on OTA
