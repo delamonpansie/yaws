@@ -68,7 +68,7 @@ static void vdd_read()
         vdd = (float)adc_data / 1000 * offset;
 }
 
-static void read_bme280(struct timeval *poweron __attribute__(()))
+static esp_err_t read_bme280(struct timeval *poweron __attribute__(()))
 {
         bmp280_params_t params;
         bmp280_init_default_params(&params);
@@ -85,23 +85,20 @@ static void read_bme280(struct timeval *poweron __attribute__(()))
         } while (busy);
 
         float pressure, temperature, humidity;
-        int x = bmp280_read_float(&dev, &temperature, &pressure, &humidity);
+        esp_err_t res = bmp280_read_float(&dev, &temperature, &pressure, &humidity);
 
         gpio_set_level(PWR_GPIO, 0); // power-off sensor module
+        if (res == ESP_OK) {
+                const char *metric[] = {"temperature", "pressure", "humidity", vdd > 0.5 ? "voltage" : NULL, NULL};
+                const float value[] = {temperature, pressure, humidity, vdd};
 
-        if (x != ESP_OK) {
-                ESP_LOGE(TAG, "Temperature/pressure reading failed\n");
-                return;
+                graphite(macstr("yaws.sensor_", ""), metric, value);
+                ESP_LOGI(TAG, "temperature: %.2f°C, pressure: %.2fPa, humidity: %.2f%%, voltage: %0.2fV", temperature, pressure, humidity, vdd);
         }
-
-        const char *metric[] = {"temperature", "pressure", "humidity", vdd > 0.5 ? "voltage" : NULL, NULL};
-        const float value[] = {temperature, pressure, humidity, vdd};
-
-        graphite(macstr("yaws.sensor_", ""), metric, value);
-        ESP_LOGI(TAG, "temperature: %.2f°C, pressure: %.2fPa, humidity: %.2f%%, voltage: %0.2fV", temperature, pressure, humidity, vdd);
+        return res;
 }
 
-static void read_mcp9808(struct timeval *poweron)
+static esp_err_t read_mcp9808(struct timeval *poweron)
 {
         i2c_dev_t dev = {.port = 0};
         ESP_ERROR_CHECK(mcp9808_init_desc(&dev, MCP9808_I2C_ADDR_000, I2C_PORT, SDA_GPIO, SCL_GPIO));
@@ -127,12 +124,11 @@ static void read_mcp9808(struct timeval *poweron)
 
                 graphite(macstr("yaws.sensor_", ""), metric, value);
                 ESP_LOGI(TAG, "temperature: %.2f°C, voltage: %0.2fV", temperature, vdd);
-        } else {
-                ESP_LOGE(TAG, "Could not get results: %d (%s)", res, esp_err_to_name(res));
         }
+        return res;
 }
 
-static void read_adt7410(struct timeval *poweron)
+static esp_err_t read_adt7410(struct timeval *poweron)
 {
         adt7410_t dev = {.i2c_dev = {.port = 0}};
         ESP_ERROR_CHECK(adt7410_init_desc(&dev, ADT7410_I2C_ADDR_000, I2C_PORT, SDA_GPIO, SCL_GPIO));
@@ -158,9 +154,8 @@ static void read_adt7410(struct timeval *poweron)
 
                 graphite(macstr("yaws.sensor_", ""), metric, value);
                 ESP_LOGI(TAG, "temperature: %.2f°C, voltage: %0.2fV", temperature, vdd);
-        } else {
-                ESP_LOGE(TAG, "Could not get results: %d (%s)", res, esp_err_to_name(res));
         }
+        return res;
 }
 
 static uint8_t i2c_addr_detect()
@@ -317,7 +312,6 @@ void app_main()
         struct timeval poweron;
         gettimeofday(&poweron, NULL);
 
-
         // connect to WiFi before anything else. OTA must run _before_ any potentially buggy code
         if (wifi_connect() != ESP_OK)
                 goto sleep;
@@ -340,17 +334,19 @@ void app_main()
                 }
         }
 
+        esp_err_t res = ESP_OK;
         uint8_t addr = i2c_addr();
         switch (addr) {
-        case BMP280_I2C_ADDRESS_1: read_bme280(&poweron); break;
-        case MCP9808_I2C_ADDR_000: read_mcp9808(&poweron); break;
-        case ADT7410_I2C_ADDR_000: read_adt7410(&poweron); break;
+        case BMP280_I2C_ADDRESS_1: res = read_bme280(&poweron); break;
+        case MCP9808_I2C_ADDR_000: res = read_mcp9808(&poweron); break;
+        case ADT7410_I2C_ADDR_000: res = read_adt7410(&poweron); break;
         case 0x80:
                 break;
         default:
                 ESP_LOGE(TAG, "unknown sensor addr 0x%02x", addr);
         }
-
+        if (res != ESP_OK)
+                ESP_LOGE(TAG, "Could not get sensor measurments: %d (%s)", res, esp_err_to_name(res));
         gpio_set_level(PWR_GPIO, 0); // power-off sensor module
 
         unsigned send_wait_delay = 100 / portTICK_RATE_MS;
