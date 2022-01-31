@@ -160,8 +160,11 @@ static void syslog_task(void *arg)
                                 int errlen = len - header_len;
                                 if (errlen >= sizeof syslog_last_err)
                                         errlen = sizeof syslog_last_err - 1;
-                                memcpy(syslog_last_err, msg + header_len, errlen);
-                                syslog_last_err[errlen] = 0;
+                                char *err = msg + header_len;
+                                if (errlen > 10 && memcmp(err, "prev_err: ", 10) != 0) {
+                                        memcpy(syslog_last_err, msg + header_len, errlen);
+                                        syslog_last_err[errlen] = 0;
+                                }
                         }
                 } else {
                         iov[0].iov_len = snprintf(header, sizeof header, "<%d> ", facility * 8 + 6);

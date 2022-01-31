@@ -299,8 +299,8 @@ void app_main()
         vdd_read();
         syslog_init();
         if (last_err[0] != 0) {
-                ESP_LOGE(TAG, "prev err: %s", last_err);
-                last_err[0] = 0;
+                syslog_last_err[0] = 0;
+                ESP_LOGE(TAG, "prev_err: %s", last_err); // "prev_err: " prefix is required to avoid infinite looping
         }
 
         gpio_config_t cfg = {
@@ -354,10 +354,9 @@ void app_main()
                 send_wait_delay *= 5;
         vTaskDelay(send_wait_delay); // TODO: better wait for send completion
 
-        // clear error: everything went as expected
-        last_err[0] = 0;
 sleep:
-        memcpy((char *)last_err, syslog_last_err, sizeof(last_err));
+        if (syslog_last_err[0])
+                memcpy((char *)last_err, syslog_last_err, sizeof(last_err));
 
         wifi_disconnect();
 
