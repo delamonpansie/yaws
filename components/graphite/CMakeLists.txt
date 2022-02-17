@@ -1,5 +1,5 @@
 idf_component_register(
-    SRCS "graphite.c"
+    SRCS graphite.c
     INCLUDE_DIRS .
-    REQUIRES log
+    REQUIRES log wifi
 )
