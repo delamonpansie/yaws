@@ -111,7 +111,7 @@ static esp_err_t read_mcp9808(struct timeval *poweron)
         // mcp9808 needs 250ms to perform measurement
         const int measurement_delay_msec = 250 * 1.2; // +20% tolerance
         if (poweron_duration_msec <  measurement_delay_msec)
-                vTaskDelay((measurement_delay_msec - poweron_duration_msec) / portTICK_RATE_MS);
+                vTaskDelay((measurement_delay_msec - poweron_duration_msec) / portTICK_PERIOD_MS);
 
         float temperature = 0;
         esp_err_t res = mcp9808_get_temperature(&dev, &temperature, NULL, NULL, NULL);
@@ -141,7 +141,7 @@ static esp_err_t read_adt7410(struct timeval *poweron)
         // adt7410 needs 240ms to perform measurement
         const int measurement_delay_msec = 240 * 1.2; // +20% tolerance
         if (poweron_duration_msec <  measurement_delay_msec)
-                vTaskDelay((measurement_delay_msec - poweron_duration_msec) / portTICK_RATE_MS);
+                vTaskDelay((measurement_delay_msec - poweron_duration_msec) / portTICK_PERIOD_MS);
 
         float temperature = 0;
         esp_err_t res = adt7410_get_temperature(&dev, &temperature);
@@ -329,7 +329,7 @@ void app_main()
                         if (addr != 0x80)
                                 i2c_addr_store(addr);
 
-                        vTaskDelay(100 / portTICK_RATE_MS);
+                        vTaskDelay(100 / portTICK_PERIOD_MS);
                         esp_restart();
                 }
         }
@@ -349,7 +349,7 @@ void app_main()
                 ESP_LOGE(TAG, "Could not get sensor measurments: %d (%s)", res, esp_err_to_name(res));
         gpio_set_level(PWR_GPIO, 0); // power-off sensor module
 
-        unsigned send_wait_delay = 100 / portTICK_RATE_MS;
+        unsigned send_wait_delay = 100 / portTICK_PERIOD_MS;
         if (vdd < 1)
                 send_wait_delay *= 5;
         vTaskDelay(send_wait_delay); // TODO: better wait for send completion

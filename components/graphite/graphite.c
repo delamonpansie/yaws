@@ -102,7 +102,7 @@ esp_err_t graphite(const char *prefix, const char **metric, float *value)
                 ESP_LOGD(TAG, "Sent %d bytes, message='%.*s'", n, msglen, msg);
                 if (n == msglen)
                         break;
-                vTaskDelay(250 / portTICK_RATE_MS);
+                vTaskDelay(250 / portTICK_PERIOD_MS);
         }
         free(msg);
 

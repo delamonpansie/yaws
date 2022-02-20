@@ -61,7 +61,7 @@ typedef struct epaper_dev {
 static void send_command(epaper_dev_t *dev, uint8_t command)
 {
         while (gpio_get_level(dev->pin.busy_pin) == 0)      // 0: busy, 1: idle
-                vTaskDelay(50 / portTICK_RATE_MS);
+                vTaskDelay(50 / portTICK_PERIOD_MS);
         gpio_set_level(dev->pin.dc_pin, 0);
         spi_transaction_t tx = {
                 .length = 8,                                // length is in bits
