@@ -16,12 +16,17 @@
 #include "esp_sleep.h"
 #include "esp_ota_ops.h"
 #include "esp_https_ota.h"
-#ifdef BOOTP_OTA
-#  include "lwip/dhcp.h"
-#endif
-#include "esp_netif.h"
-#if defined(CONFIG_IDF_TARGET_ESP8266)
+
+#if defined(CONFIG_IDF_TARGET_ESP32) || defined(BOOTP_OTA)
+# include "esp_netif.h"
+static esp_netif_t *netif = NULL;
+# if defined(CONFIG_IDF_TARGET_ESP8266)
 typedef struct netif esp_netif_t;
+# endif
+#endif
+
+#ifdef BOOTP_OTA
+#include "lwip/dhcp.h"
 #endif
 
 #include "freertos/FreeRTOS.h"
@@ -30,7 +35,6 @@ typedef struct netif esp_netif_t;
 #include "wifi.h"
 
 static const char *ota_base = CONFIG_OTA_BASE;
-
 static const char *TAG = "yaws-wifi";
 
 static EventGroupHandle_t status;
@@ -46,7 +50,6 @@ uint8_t mac_addr[6];
 char bootp[OTA_URL_LEN];
 #endif
 
-static esp_netif_t *netif = NULL;
 static wifi_config_t wifi_config = {
         .sta = {
                 .ssid = CONFIG_SSID,
@@ -59,6 +62,7 @@ static void on_wifi_disconnect(void *arg, esp_event_base_t event_base,
 {
         system_event_sta_disconnected_t *event = event_data;
         ESP_LOGI(TAG, "Wi-Fi disconnected, reason: %d", event->reason);
+        xEventGroupClearBits(status, BIT(1));
         xEventGroupSetBits(status, BIT(2));
 }
 
@@ -106,7 +110,7 @@ static char *ota_url(const char *base)
 
         esp_err_t err = esp_http_client_perform(client);
         if (err != ESP_OK) {
-                ESP_LOGE(TAG, "OTA version fetch failed: http_client_perform returned %d", err);
+                ESP_LOGE(TAG, "OTA version fetch failed: http_client_perform returned %s", esp_err_to_name(err));
                 goto out;
         }
 
@@ -202,36 +206,33 @@ esp_err_t wifi_connect(void)
         ESP_ERROR_CHECK(esp_wifi_init(&cfg));
         ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_MAX_MODEM));
 
+#if defined(CONFIG_IDF_TARGET_ESP32)
+        netif = esp_netif_create_default_wifi_sta();
+#endif
+
         ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED, &on_wifi_disconnect, NULL));
         ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &on_got_ip, NULL));
 
         ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
         ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config));
-
         ESP_ERROR_CHECK(esp_wifi_start());
 
-
-#if defined(CONFIG_IDF_TARGET_ESP8266)
+#if defined(CONFIG_IDF_TARGET_ESP8266) && defined(BOOTP_OTA)
         ESP_ERROR_CHECK(tcpip_adapter_get_netif(TCPIP_ADAPTER_IF_STA, (void **)&netif)); // must be called after esp_wifi_start()
-
-#elif defined(CONFIG_IDF_TARGET_ESP32)
-        netif = esp_netif_create_default_wifi_sta();
 #endif
         esp_err_t err = esp_wifi_connect();
         if (err != ESP_OK)
                 return err;
 
-        EventBits_t bits = xEventGroupWaitBits(status, BIT(1)|BIT(2), true, false, 10000 / portTICK_RATE_MS);
-        if ((bits & BIT(1)) == 0) {
-                ESP_LOGE(TAG, "Wi-Fi failed to connect");
+        EventBits_t bits = xEventGroupWaitBits(status, BIT(1)|BIT(2), false, false, 10 * configTICK_RATE_HZ);
+        if ((bits & BIT(1)) == 0)
                 return ESP_ERR_WIFI_NOT_CONNECT;
-        }
 
         return ESP_OK;
 }
 
 int wifi_connected() {
-        return xEventGroupGetBits(status) & BIT(1);
+        return status != NULL && xEventGroupGetBits(status) & BIT(1);
 }
 
 esp_err_t wifi_disconnect(void)
