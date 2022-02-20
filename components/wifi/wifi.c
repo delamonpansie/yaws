@@ -108,9 +108,15 @@ static char *ota_url(const char *base)
         };
         esp_http_client_handle_t client = esp_http_client_init(&client_config);
 
-        esp_err_t err = esp_http_client_perform(client);
+        esp_err_t err = esp_http_client_open(client, 0);
         if (err != ESP_OK) {
-                ESP_LOGE(TAG, "OTA version fetch failed: http_client_perform returned %s", esp_err_to_name(err));
+                ESP_LOGE(TAG, "Failed to open HTTP connection: %s", esp_err_to_name(err));
+                goto out;
+        }
+
+        int content_length = esp_http_client_fetch_headers(client);
+        if (content_length < 0) {
+                ESP_LOGE(TAG, "HTTP client fetch headers failed");
                 goto out;
         }
 
@@ -120,19 +126,24 @@ static char *ota_url(const char *base)
                 result = ota_not_found;
                 goto out;
         }
+
         if (status_code != 200) {
                 ESP_LOGE(TAG, "OTA version %s fetch failed: status code %d", url, status_code);
                 goto out;
         }
 
-
-        char version[33] = {0,};
-        esp_http_client_read(client, version, sizeof version - 1);
+        char version[64] = {0,};
+        esp_http_client_read_response(client, version, sizeof version - 1);
         for (char *p = version; *p; p++) {
                 if (isspace(*p)) {
                         *p = 0;
                         break;
                 }
+        }
+
+        if (strlen(version) == 0) {
+                ESP_LOGE(TAG, "empty remote version");
+                goto out;
         }
 
         ESP_LOGI(TAG, "OTA remote version: %s, local version: %s", version, app_desc->version);
@@ -163,7 +174,7 @@ esp_err_t ota(char *updated)
         if (url == NULL)
                 url = ota_url(macstr(ota_base, "/"));
 
-        if (url == NULL)
+        if (url == NULL || url == ota_not_found)
                 url = ota_url(ota_base);
 
         if (url == ota_same_version)
