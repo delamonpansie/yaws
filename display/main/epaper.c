@@ -1,6 +1,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "esp_log.h"
+#include <esp32/rom/ets_sys.h>
 
 #include <driver/spi_master.h>
 #include <driver/gpio.h>
@@ -55,7 +56,7 @@ static const char* TAG = "epaper";
 typedef struct epaper_dev {
     spi_device_handle_t bus;
     epaper_conf_t pin;
-    xSemaphoreHandle spi_mux;
+    SemaphoreHandle_t spi_mux;
 } epaper_dev_t;
 
 static void send_command(epaper_dev_t *dev, uint8_t command)
@@ -95,17 +96,19 @@ static void send_byte(epaper_handle_t dev, const uint8_t data)
 
 static void epaper_gpio_init(epaper_conf_t * pin)
 {
-        gpio_pad_select_gpio(pin->reset_pin);
-        gpio_set_direction(pin->reset_pin, GPIO_MODE_OUTPUT);
+        gpio_config(&(gpio_config_t){
+                .mode = GPIO_MODE_OUTPUT,
+                .pin_bit_mask = BIT64(pin->reset_pin)|BIT64(pin->dc_pin),
+        });
         gpio_set_level(pin->reset_pin, 1);
-        gpio_pad_select_gpio(pin->dc_pin);
-        gpio_set_direction(pin->dc_pin, GPIO_MODE_OUTPUT);
-        gpio_pad_select_gpio(pin->busy_pin);
-        gpio_set_direction(pin->busy_pin, GPIO_MODE_INPUT);
-        gpio_set_pull_mode(pin->busy_pin, GPIO_PULLUP_ONLY);
+        gpio_config(&(gpio_config_t){
+                .mode = GPIO_MODE_INPUT,
+                .pin_bit_mask = BIT64(pin->busy_pin),
+                .pull_up_en = GPIO_PULLUP_ENABLE,
+        });
 }
 
-static esp_err_t spi_init(epaper_handle_t dev)
+static void spi_init(epaper_handle_t dev)
 {
         spi_bus_config_t buscfg = {
                 .miso_io_num = -1,                       // Halfduplex, no MISO pin
@@ -124,10 +127,9 @@ static esp_err_t spi_init(epaper_handle_t dev)
                 .flags = SPI_DEVICE_HALFDUPLEX | SPI_DEVICE_3WIRE,
         };
         //Initialize the SPI bus
-        ESP_ERROR_CHECK(spi_bus_initialize(dev->pin.spi_host, &buscfg, 1));
+        spi_bus_initialize(dev->pin.spi_host, &buscfg, 1);
         //Attach the EPD to the SPI bus
-        ESP_ERROR_CHECK(spi_bus_add_device(dev->pin.spi_host, &devcfg, &dev->bus));
-        return ESP_OK;
+        spi_bus_add_device(dev->pin.spi_host, &devcfg, &dev->bus);
 }
 
 
