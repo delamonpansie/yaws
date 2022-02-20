@@ -1,87 +1,78 @@
 #include <string.h>
+
+#include "driver/adc.h"
 #include "driver/gpio.h"
+
+#include "esp_event.h"
+#include "esp_http_client.h"
+#include "esp_log.h"
+#include "esp_ota_ops.h"
+#include "esp_sleep.h"
+#include "esp_timer.h"
+#include "nvs_flash.h"
+#include "esp_adc_cal.h"
+
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "esp_system.h"
-#include "esp_wifi.h"
-#include "esp_event.h"
-#include "esp_log.h"
-#include "esp_sleep.h"
-#include "hal/gpio_types.h"
-#include "nvs_flash.h"
-#include <bmp280.h>
-
-#include "lwip/err.h"
-#include "lwip/sockets.h"
-#include "lwip/sys.h"
-#include "lwip/netdb.h"
-#include "lwip/dns.h"
-
-static const char *TAG = "yaws";
 
 #include "syslog.h"
 #include "graphite.h"
-#include "daisy.h"
+#include "wifi.h"
 #include "epaper.h"
 
-#include "esp_http_client.h"
+static const char *TAG = "undefined";
 
-static void sensor()
+static float vdd;
+static void vdd_read()
 {
-        bmp280_params_t params;
-        bmp280_init_default_params(&params);
-        bmp280_t dev;
-        memset(&dev, 0, sizeof(bmp280_t));
+        /* ADC1 channel 7 is GPIO35 */
+        adc_power_acquire();
 
-#define SCL_GPIO GPIO_NUM_21
-#define SDA_GPIO GPIO_NUM_22
+        adc1_config_width(ADC_WIDTH_BIT_12);
+        adc1_config_channel_atten(ADC1_CHANNEL_7, ADC_ATTEN_DB_11);
+        esp_adc_cal_characteristics_t characteristics;
+        esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_12,
+                                 ESP_ADC_CAL_VAL_DEFAULT_VREF, &characteristics);
+        uint32_t adc_raw = adc1_get_raw((adc1_channel_t)ADC1_CHANNEL_7);
+        uint32_t mv = esp_adc_cal_raw_to_voltage(adc_raw, &characteristics);
 
-        gpio_set_direction(GPIO_NUM_23, GPIO_MODE_OUTPUT);
-        gpio_set_level(GPIO_NUM_23, 1); // power-on sensor module
+        float offset = 3.23;  // (150kOhm + 330kOhm) / 150 kOhm
+        struct {
+                uint8_t mac[6];
+                float offset;
+        } tab[] = {
+                // #include "adc_offset_tab.h"
+                { .offset = 0 }
+        };
 
-        ESP_ERROR_CHECK(bmp280_init_desc(&dev, BMP280_I2C_ADDRESS_1, 0, SDA_GPIO, SCL_GPIO));
-        ESP_ERROR_CHECK(bmp280_init(&dev, &params));
-
-        bool busy;
-        do {
-                ets_delay_us(250); // for whatever reason, bme280 doesn't start measuring right away
-                ESP_ERROR_CHECK(bmp280_is_measuring(&dev, &busy));
-        } while (busy);
-
-        float pressure, temperature, humidity;
-        int x = bmp280_read_float(&dev, &temperature, &pressure, &humidity);
-
-        gpio_set_level(GPIO_NUM_23, 0); // power-off sensor module
-
-        if (x != ESP_OK) {
-                ESP_LOGE(TAG, "Temperature/pressure reading failed\n");
-                return;
+        uint8_t mac[6];
+        esp_efuse_mac_get_default(mac);
+        for (int i = 0; tab[i].offset; i++) {
+                if (memcmp(mac, tab[i].mac, 6) == 0) {
+                        offset = tab[i].offset;
+                        break;
+                }
         }
 
-        ESP_LOGI(TAG, "Temperature: %.2f, pressure: %.2f, humidity: %.2f", temperature, pressure, humidity);
-        graphite("10.3.14.10", "yaws.bme280",
-                 (const char*[]){"temperature", "pressure", "humidity", NULL},
-                 (float[]){temperature, pressure, humidity});
+        vdd = (float)mv / 1000 * offset;
+        adc_power_release();
 }
 
+char RTC_DATA_ATTR saved_etag[16] = {0};
 
-volatile char RTC_DATA_ATTR saved_etag[16] = {0};
+static esp_err_t event_handler(esp_http_client_event_t *ev)
+{
+        if (ev->event_id == HTTP_EVENT_ON_HEADER)
+                if (strcmp(ev->header_key, "ETag") == 0)
+                        strlcpy(saved_etag, ev->header_value, 16);
+        return ESP_OK;
+}
 
 uint8_t *get(const char *url, unsigned *len)
 {
         uint8_t *buffer = NULL;
         int content_length;
         char *etag = NULL;
-
-        esp_err_t event_handler(esp_http_client_event_t *ev)
-        {
-                if (ev->event_id == HTTP_EVENT_ON_HEADER)
-                        if (strcmp(ev->header_key, "ETag") == 0)
-                                strlcpy(saved_etag, ev->header_value, 16);
-                return ESP_OK;
-        }
-
-        ESP_LOGI(TAG, "ETag: %s", saved_etag);
 
         esp_http_client_config_t config = {
                 .url = url,
@@ -91,8 +82,10 @@ uint8_t *get(const char *url, unsigned *len)
         };
         esp_http_client_handle_t client = esp_http_client_init(&config);
 
-        if (*saved_etag)
+        if (*saved_etag) {
+                ESP_LOGD(TAG, "ETag: %s", saved_etag);
                 esp_http_client_set_header(client, "If-None-Match", saved_etag);
+        }
 
         esp_err_t err = esp_http_client_open(client, 0);
         if (err != ESP_OK) {
@@ -108,18 +101,16 @@ uint8_t *get(const char *url, unsigned *len)
 
         int code = esp_http_client_get_status_code(client);
         if (code != HttpStatus_Ok) {
-                ESP_LOGI(TAG, "HTTP CODE %x", code);
+                ESP_LOGW(TAG, "HTTP CODE %d", code);
                 goto out;
         }
 
-        if (content_length == 0) {
+        if (content_length == 0)
                 goto out;
-        }
-
 
         buffer = malloc(content_length);
         if (buffer == NULL) {
-                ESP_LOGE(TAG, "Failed to allocate PNG buffer");
+                ESP_LOGE(TAG, "Failed to allocate picture buffer");
                 goto out;
         }
 
@@ -127,9 +118,11 @@ uint8_t *get(const char *url, unsigned *len)
         if (data_read != content_length) {
                 ESP_LOGE(TAG, "Failed to read response");
                 free(buffer);
+                buffer = NULL;
                 goto out;
         }
 
+        ESP_LOGI(TAG, "GET %s fetched %d bytes", url, *len);
 out:    esp_http_client_close(client);
         return buffer;
 }
@@ -137,9 +130,6 @@ out:    esp_http_client_close(client);
 
 void display(const uint8_t *data, unsigned size)
 {
-        if (data == NULL)
-                return;
-
         const unsigned ep_size = 800 * 480 / 8;
         if (size != ep_size) {
                 ESP_LOGE(TAG, "Invalid bitmap size; got %d, want %d", size, ep_size);
@@ -164,39 +154,61 @@ void display(const uint8_t *data, unsigned size)
         epaper_delete(ep);
 }
 
+volatile int RTC_DATA_ATTR ota_disabled;
+volatile char RTC_DATA_ATTR last_err[32];
+
 void app_main(void)
 {
-        /* const esp_app_desc_t *app_desc = esp_ota_get_app_description(); */
-        /* TAG = app_desc->project_name; */
-        log_early_init();
+        const esp_app_desc_t *app_desc = esp_ota_get_app_description();
+        TAG = app_desc->project_name;
+        syslog_early_init();
 
-        esp_log_level_set("*", ESP_LOG_INFO);
+        esp_log_level_set("*", ESP_LOG_WARN);
         esp_log_level_set("esp_https_ota", ESP_LOG_INFO);
         esp_log_level_set(TAG, ESP_LOG_INFO);
         esp_log_level_set("yaws-wifi", ESP_LOG_INFO);
         esp_log_level_set("yaws-syslog", ESP_LOG_INFO);
-        esp_log_level_set("yaws-graphite", ESP_LOG_DEBUG);
+        esp_log_level_set("yaws-graphite", ESP_LOG_INFO);
 
         ESP_ERROR_CHECK(nvs_flash_init());
         ESP_ERROR_CHECK(esp_netif_init());
-        ESP_ERROR_CHECK(i2cdev_init());
         ESP_ERROR_CHECK(esp_event_loop_create_default());
 
-        log_init();
+        vdd_read();
+        syslog_init();
 
-        ESP_ERROR_CHECK(wifi_connect());
+        // connect to WiFi before anything else. OTA must run _before_ any potentially buggy code
+        if (wifi_connect() != ESP_OK)
+                goto sleep;
 
-        sensor();
+        // OTA source is checked only once after boot to save power.
+        // If you want to force OTA: do a power cycle (reset is not enough).
+        if (ota_disabled != 0x13131313) {
+                char updated = 0;
+                esp_err_t err = ota(&updated);
+                if (err == ESP_OK || err == ESP_ERR_NOT_FOUND)
+                        ota_disabled = 0x13131313;
+                if (updated) {
+                        vTaskDelay(100 / portTICK_PERIOD_MS);
+                        esp_restart();
+                }
+        }
 
         unsigned size;
         uint8_t *data = get("http://yaws.home.arpa/image.raw", &size);
-        display(data, size);
+        if (data != NULL)
+                display(data, size);
 
-        vTaskDelay(200 / portTICK_RATE_MS); // TODO: better wait for send completion
+        const char *metric[] = {"voltage" , NULL};
+        const float value[] = {vdd};
+        graphite(macstr("yaws.sensor_", ""), metric, value);
+        ESP_LOGI(TAG, "voltage: %0.2fV", vdd);
+sleep:
+        if (syslog_last_err[0])
+                memcpy((char *)last_err, syslog_last_err, sizeof(last_err));
 
-        int sleep = 1 * 60;
-        ESP_LOGD(TAG, "deep sleep for %d seconds", sleep);
-        ESP_ERROR_CHECK(wifi_disconnect());
-        esp_deep_sleep(sleep * 1000000);
+        wifi_disconnect();
 
+        unsigned sleep_duration = 5 * 60 * 1000000;
+        esp_deep_sleep(sleep_duration - esp_log_timestamp() * 1000);
 }
