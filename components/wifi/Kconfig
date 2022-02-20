@@ -11,7 +11,8 @@ config PASSWORD
       Password of target AP
 
 config OTA_BASE
-    string "ota.home.arpa/ota/"
+    string "Base URL for OTA request"
+    default "ota.home.arpa/ota/"
     help
       Prefix to OTA server. It is used to construct OTA URLs as http://<base><MAC>/<project_name>.version and http://<base><MAC>/<project_name>.bin
 
