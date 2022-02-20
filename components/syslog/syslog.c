@@ -198,7 +198,7 @@ static void syslog_task(void *arg)
                 iov[1].iov_base = msg + header_len;
                 iov[1].iov_len = len - header_len;
 
-                while (sendmsg(sock, &msghdr, 0) == -1)
+                while (!wifi_connected() || sendmsg(sock, &msghdr, 0) == -1)
                         vTaskDelay(100 / portTICK_PERIOD_MS);
         }
 }
