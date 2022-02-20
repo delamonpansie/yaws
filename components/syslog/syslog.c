@@ -10,6 +10,7 @@
 #include <lwip/netdb.h>
 
 #include "syslog.h"
+#include "wifi.h"
 
 static const char* TAG = "yaws-syslog";
 
@@ -68,6 +69,35 @@ static int decode_prio(char ch)
         }
 }
 
+static void buffer_send(char *msg, int len)
+{
+        /* printf("{{{%.*s}}}\n", len, msg); */
+
+        len = trim_color_escape_seq_and_newline(msg, len);
+        msg[len] = 0;
+
+        // Ignore garbage produced by SDK
+        // "wifi E (238) timer:0x3ffe9a24 cb is null" messages
+        // W (787) wifi:<ba-add>idx:1 (ifx:0, 4c:ed:fb:b2:df:a8), tid:0, ssn:0, winSize:64
+        // W (817) wifi:<ba-del>idx
+        // W (817) wifi:hmac tx: ifx0 stop, discard
+        if (strstr(msg, "wifi") && (strstr(msg, "cb is null")))
+                return;
+        if (strstr(msg, "wifi:<ba-add>"))
+                return;
+        if (strstr(msg, "wifi:<ba-del>"))
+                return;
+        if (strstr(msg, "wifi:hmac") && strstr(msg, "stop, discard"))
+                return;
+        if (len == 0)
+                return;
+
+        bool taken = xSemaphoreTake(lock, portMAX_DELAY);
+        assert(taken == true);
+        xMessageBufferSend(msgbuf, msg, len < SIZE ? len : SIZE, 100);
+        xSemaphoreGive(lock);
+}
+
 #if defined(CONFIG_IDF_TARGET_ESP8266)
 static int syslog_putchar(int ch)
 {
@@ -77,10 +107,7 @@ static int syslog_putchar(int ch)
                 *wptr++ = ch;
 
         if (ch == '\n') {
-                bool taken = xSemaphoreTake(lock, portMAX_DELAY);
-                assert(taken == true);
-                xMessageBufferSend(msgbuf, buf, wptr - buf, 0);
-                xSemaphoreGive(lock);
+                buffer_send(buf, wptr - buf);
                 wptr = buf;
         }
 
@@ -91,19 +118,22 @@ static int syslog_putchar(int ch)
 #elif defined(CONFIG_IDF_TARGET_ESP32)
 static int syslog_vprintf(const char *fmt, va_list va)
 {
-        char *buf;
-        int len = vasprintf(&buf, fmt, va);
-        if (len != -1) {
-                bool taken = xSemaphoreTake(lock, portMAX_DELAY);
-                assert(taken == true);
-                xMessageBufferSend(msgbuf, buf, len < SIZE ? len : SIZE, 100);
-                xSemaphoreGive(lock);
-                free(buf);
+        static char buf[SIZE];
+        static int len;
+        int n = vsnprintf(buf + len, SIZE - len, fmt, va);
+        if (n <= 0)
+                return n;
+        len += n;
+        if (len >= SIZE)
+                len = SIZE;
+        if (len == SIZE || buf[len - 1] == '\n' || buf[len - 1] == '\r') {
+                buffer_send(buf, len);
+                len = 0;
         }
 
         if (old_vprintf != NULL)
                 return old_vprintf(fmt, va);
-        return len;
+        return n;
 }
 #endif
 
@@ -139,13 +169,6 @@ static void syslog_task(void *arg)
         while (1) {
                 size_t len = xMessageBufferReceive(msgbuf, msg, sizeof msg - 1, portMAX_DELAY);
                 assert(len != 0);
-
-                len = trim_color_escape_seq_and_newline(msg, len);
-                msg[len] = 0;
-
-                // ignore "wifi E (238) timer:0x3ffe9a24 cb is null" messages
-                if (strstr(msg, "wifi") && strstr(msg, "cb is null"))
-                        continue;
 
                 int header_len = 0;
                 unsigned tick;
