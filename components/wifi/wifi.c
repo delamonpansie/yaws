@@ -107,11 +107,14 @@ static char *ota_url(const char *base)
                 .method = HTTP_METHOD_GET,
         };
         esp_http_client_handle_t client = esp_http_client_init(&client_config);
+        if (client == NULL)
+                // esp_http_client_init will log error for us
+                return NULL;
 
         esp_err_t err = esp_http_client_open(client, 0);
         if (err != ESP_OK) {
                 ESP_LOGE(TAG, "Failed to open HTTP connection: %s", esp_err_to_name(err));
-                goto out;
+                return NULL;
         }
 
         int content_length = esp_http_client_fetch_headers(client);
