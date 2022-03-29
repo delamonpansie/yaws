@@ -347,6 +347,7 @@ void app_main()
         }
         if (res != ESP_OK)
                 ESP_LOGE(TAG, "Could not get sensor measurments: %d (%s)", res, esp_err_to_name(res));
+
         gpio_set_level(PWR_GPIO, 0); // power-off sensor module
 sleep:
         if (syslog_last_err[0])
