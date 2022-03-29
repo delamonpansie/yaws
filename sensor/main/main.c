@@ -348,12 +348,6 @@ void app_main()
         if (res != ESP_OK)
                 ESP_LOGE(TAG, "Could not get sensor measurments: %d (%s)", res, esp_err_to_name(res));
         gpio_set_level(PWR_GPIO, 0); // power-off sensor module
-
-        unsigned send_wait_delay = 100 / portTICK_PERIOD_MS;
-        if (vdd < 1)
-                send_wait_delay *= 5;
-        vTaskDelay(send_wait_delay); // TODO: better wait for send completion
-
 sleep:
         if (syslog_last_err[0])
                 memcpy((char *)last_err, syslog_last_err, sizeof(last_err));

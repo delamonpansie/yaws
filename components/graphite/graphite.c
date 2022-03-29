@@ -19,7 +19,7 @@
 
 static const char* TAG = "yaws-graphite";
 
-static char *format(const char *prefix, const char **metric, float *value, int *msglen)
+static char *format(const char *prefix, const char **metric, const float *value, int *msglen)
 {
         int prefix_len = strlen(prefix);
         int len = 0;
@@ -54,12 +54,10 @@ static char *format(const char *prefix, const char **metric, float *value, int *
         return buf;
 }
 
-static int sock = -1;
-static struct sockaddr_in addr;
 
-static esp_err_t graphite_init()
+esp_err_t graphite(const char *prefix, const char **metric, const float *value)
 {
-        addr = (struct sockaddr_in) {
+        struct sockaddr_in addr = {
                 .sin_family = AF_INET,
                 .sin_addr = (struct in_addr){
                         .s_addr = inet_addr(CONFIG_GRAPHITE_ADDR),
@@ -68,43 +66,41 @@ static esp_err_t graphite_init()
         };
 
         if (addr.sin_addr.s_addr == INADDR_NONE) {
-                ESP_LOGE(TAG, "Invalid graphite address: %s", CONFIG_GRAPHITE_ADDR);
+                ESP_LOGE(TAG, "graphite: invalid address: %s", CONFIG_GRAPHITE_ADDR);
                 return ESP_FAIL;
         }
 
-        sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
+        int sock = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
         if (sock < 0) {
-                ESP_LOGE(TAG, "Unable to create socket: errno %d", errno);
+                ESP_LOGE(TAG, "graphite: unable to create socket: %s", strerror(errno));
                 return ESP_FAIL;
         }
 
-        return ESP_OK;
-}
-
-esp_err_t graphite(const char *prefix, const char **metric, float *value)
-{
-        if (sock < 0) {
-                esp_err_t err = graphite_init();
-                if (err != ESP_OK)
-                        return err;
+        if (connect(sock, (struct sockaddr *)&addr, sizeof addr) < 0) {
+                ESP_LOGE(TAG, "graphite: connect failed: %s", strerror(errno));
+                return ESP_FAIL;
         }
 
         int msglen = 0;
         char *msg = format(prefix, metric, value, &msglen);
         if (msg == NULL) {
-                ESP_LOGI(TAG, "Formatting failed");
+                ESP_LOGI(TAG, "graphite: formatting failed");
                 return ESP_FAIL;
         }
 
-        int n;
-        for (;;) {
-                n = sendto(sock, msg, msglen, 0, (struct sockaddr *)&addr, sizeof addr);
-                ESP_LOGD(TAG, "Sent %d bytes, message='%.*s'", n, msglen, msg);
-                if (n == msglen)
+        char *ptr = msg;
+        while (msglen > 0) {
+                int n = send(sock, ptr, msglen, 0);
+                if (n < 0) {
+                        ESP_LOGE(TAG, "graphite: send failed: %s", strerror(errno));
                         break;
-                vTaskDelay(250 / portTICK_PERIOD_MS);
+                }
+                ptr += n;
+                msglen -= n;
         }
+
         free(msg);
+        close(sock);
 
         return ESP_OK;
 }
