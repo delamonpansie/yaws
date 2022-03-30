@@ -19,7 +19,7 @@
 
 static const char* TAG = "yaws-graphite";
 
-static char *format(const char *prefix, const char **metric, const float *value, int *msglen)
+static char *format(const char *prefix, const char **metric, float *value, int *msglen)
 {
         int prefix_len = strlen(prefix);
         int len = 0;
@@ -54,10 +54,12 @@ static char *format(const char *prefix, const char **metric, const float *value,
         return buf;
 }
 
+static int sock = -1;
+static struct sockaddr_in addr;
 
-esp_err_t graphite(const char *prefix, const char **metric, const float *value)
+static esp_err_t graphite_init()
 {
-        struct sockaddr_in addr = {
+        addr = (struct sockaddr_in) {
                 .sin_family = AF_INET,
                 .sin_addr = (struct in_addr){
                         .s_addr = inet_addr(CONFIG_GRAPHITE_ADDR),
@@ -70,37 +72,36 @@ esp_err_t graphite(const char *prefix, const char **metric, const float *value)
                 return ESP_FAIL;
         }
 
-        int sock = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
+        sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
         if (sock < 0) {
-                ESP_LOGE(TAG, "socket: %s", strerror(errno));
+                ESP_LOGE(TAG, "socket: errno %s", strerror(errno));
                 return ESP_FAIL;
         }
 
-        if (connect(sock, (struct sockaddr *)&addr, sizeof addr) < 0) {
-                ESP_LOGE(TAG, "connect: %s", strerror(errno));
-                return ESP_FAIL;
+        return ESP_OK;
+}
+
+esp_err_t graphite(const char *prefix, const char **metric, float *value)
+{
+        if (sock < 0) {
+                esp_err_t err = graphite_init();
+                if (err != ESP_OK)
+                        return err;
         }
 
         int msglen = 0;
         char *msg = format(prefix, metric, value, &msglen);
-        if (msg == NULL) {
-                ESP_LOGI(TAG, "graphite: formatting failed");
+        if (msg == NULL)
                 return ESP_FAIL;
-        }
 
-        char *ptr = msg;
-        while (msglen > 0) {
-                int n = send(sock, ptr, msglen, 0);
-                if (n < 0) {
-                        ESP_LOGE(TAG, "send: %s", strerror(errno));
+        int n;
+        for (;;) {
+                n = sendto(sock, msg, msglen, 0, (struct sockaddr *)&addr, sizeof addr);
+                if (n == msglen)
                         break;
-                }
-                ptr += n;
-                msglen -= n;
+                vTaskDelay(50 / portTICK_PERIOD_MS);
         }
-
         free(msg);
-        close(sock);
 
         return ESP_OK;
 }
