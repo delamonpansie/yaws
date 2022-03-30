@@ -137,7 +137,7 @@ static int syslog_vprintf(const char *fmt, va_list va)
 }
 #endif
 
-char syslog_last_err[32];
+char syslog_last_err[64];
 static void syslog_task(void *arg)
 {
         char msg[SIZE+1], tag[32], header[64];

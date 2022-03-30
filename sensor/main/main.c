@@ -264,7 +264,7 @@ static uint8_t i2c_addr()
 }
 
 volatile int RTC_DATA_ATTR ota_disabled;
-volatile char RTC_DATA_ATTR last_err[32];
+volatile char RTC_DATA_ATTR last_err[64];
 
 void app_main()
 {
@@ -301,6 +301,7 @@ void app_main()
         if (last_err[0] != 0) {
                 syslog_last_err[0] = 0;
                 ESP_LOGE(TAG, "prev_err: %s", last_err); // "prev_err: " prefix is required to avoid infinite looping
+                last_err[0] = 0;
         }
 
         gpio_config_t cfg = {
