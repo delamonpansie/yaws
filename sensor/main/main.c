@@ -364,9 +364,14 @@ sleep:
 
         struct timeval now;
         gettimeofday(&now, NULL);
-        unsigned sleep_duration = 5 * 60 * 1000000;
+        unsigned offset = now.tv_sec * 1000000 + now.tv_usec + 500000;
+
+        unsigned sleep_duration = 3 * 60 * 1000000;
         if (vdd < 1)
-                sleep_duration /= 5;
+                sleep_duration /= 3;
+
+        if (sleep_duration > offset)
+                sleep_duration -= offset;
 
         esp_deep_sleep(sleep_duration - now.tv_sec * 1000000 - now.tv_usec - 500000);
 }
