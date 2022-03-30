@@ -66,18 +66,18 @@ esp_err_t graphite(const char *prefix, const char **metric, const float *value)
         };
 
         if (addr.sin_addr.s_addr == INADDR_NONE) {
-                ESP_LOGE(TAG, "graphite: invalid address: %s", CONFIG_GRAPHITE_ADDR);
+                ESP_LOGE(TAG, "invalid CONFIG_GRAPHITE_ADDR: %s", CONFIG_GRAPHITE_ADDR);
                 return ESP_FAIL;
         }
 
         int sock = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
         if (sock < 0) {
-                ESP_LOGE(TAG, "graphite: unable to create socket: %s", strerror(errno));
+                ESP_LOGE(TAG, "socket: %s", strerror(errno));
                 return ESP_FAIL;
         }
 
         if (connect(sock, (struct sockaddr *)&addr, sizeof addr) < 0) {
-                ESP_LOGE(TAG, "graphite: connect failed: %s", strerror(errno));
+                ESP_LOGE(TAG, "connect: %s", strerror(errno));
                 return ESP_FAIL;
         }
 
@@ -92,7 +92,7 @@ esp_err_t graphite(const char *prefix, const char **metric, const float *value)
         while (msglen > 0) {
                 int n = send(sock, ptr, msglen, 0);
                 if (n < 0) {
-                        ESP_LOGE(TAG, "graphite: send failed: %s", strerror(errno));
+                        ESP_LOGE(TAG, "send: %s", strerror(errno));
                         break;
                 }
                 ptr += n;
