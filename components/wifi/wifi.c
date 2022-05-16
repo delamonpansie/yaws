@@ -92,13 +92,13 @@ static void on_shutdown()
 }
 #endif
 
-static char *ota_same_version = "same";
-static char *ota_not_found = "not_found";
-static char *ota_url(const char *base)
+static const char *ota_same_version = "same";
+static const char *ota_not_found = "not_found";
+static const char *ota_url(const char *base)
 {
         const esp_app_desc_t *app_desc = esp_ota_get_app_description();
         static char url[OTA_URL_LEN];
-        char *result = NULL;
+        const char *result = NULL;
 
         snprintf(url, sizeof url, "http://%s%s.version", base, app_desc->project_name);
         ESP_LOGI(TAG, "OTA checking %s", url);
@@ -168,7 +168,7 @@ out:
 
 esp_err_t ota(char *updated)
 {
-        char *url = NULL;
+        const char *url = NULL;
 
 #ifdef BOOTP_OTA
         if (memcmp(bootp, "http://", 7) == 0)
