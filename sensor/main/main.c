@@ -208,7 +208,7 @@ static uint8_t i2c_addr_detect()
 
 static esp_err_t i2c_addr_store(uint8_t addr)
 {
-        nvs_handle_t nvs;
+        nvs_handle nvs;
         esp_err_t err;
         if ((err = nvs_open(TAG, NVS_READWRITE, &nvs)) != ESP_OK)
                 goto out;
@@ -226,7 +226,7 @@ out:
 
 static esp_err_t i2c_addr_load(uint8_t *addr)
 {
-        nvs_handle_t nvs;
+        nvs_handle nvs;
         esp_err_t err;
         if ((err = nvs_open(TAG, NVS_READONLY, &nvs)) != ESP_OK)
                 return err;
