@@ -71,8 +71,6 @@ static int decode_prio(char ch)
 
 static void buffer_send(char *msg, int len)
 {
-        /* printf("{{{%.*s}}}\n", len, msg); */
-
         len = trim_color_escape_seq_and_newline(msg, len);
         msg[len] = 0;
 
