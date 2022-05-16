@@ -87,6 +87,8 @@ static void buffer_send(char *msg, int len)
                 return;
         if (strstr(msg, "wifi:hmac") && strstr(msg, "stop, discard"))
                 return;
+        if (strstr(msg, "@@"))
+                return;
         if (len == 0)
                 return;
 
@@ -96,9 +98,14 @@ static void buffer_send(char *msg, int len)
         xSemaphoreGive(lock);
 }
 
+static TaskHandle_t syslog_task_handle = NULL;
+
 #if defined(CONFIG_IDF_TARGET_ESP8266)
 static int syslog_putchar(int ch)
 {
+	if (xTaskGetCurrentTaskHandle() == syslog_task_handle)
+		return ch;
+
         static char buf[SIZE], *wptr = buf;
 
         if (wptr - buf < SIZE)
@@ -116,6 +123,9 @@ static int syslog_putchar(int ch)
 #elif defined(CONFIG_IDF_TARGET_ESP32)
 static int syslog_vprintf(const char *fmt, va_list va)
 {
+	if (xTaskGetCurrentTaskHandle() == syslog_task_handle)
+		return 0;
+
         static char buf[SIZE];
         static int len;
         int n = vsnprintf(buf + len, SIZE - len, fmt, va);
@@ -220,7 +230,7 @@ void syslog_early_init()
                 return;
         }
 
-        xTaskCreate(&syslog_task, "log", 3072, NULL, 5, NULL);
+        xTaskCreate(&syslog_task, "log", 3072, NULL, 5, &syslog_task_handle);
 #if defined(CONFIG_IDF_TARGET_ESP8266)
         old_putchar = esp_log_set_putchar(syslog_putchar);
 #elif defined(CONFIG_IDF_TARGET_ESP32)
