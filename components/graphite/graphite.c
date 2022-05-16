@@ -1,6 +1,10 @@
 #include <stdio.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+
+#ifdef CONFIG_IDF_TARGET_ESP8266
+#include "esp_aio.h"
+#endif
 #include "esp_log.h"
 #include "esp_netif.h"
 #include "lwip/err.h"
@@ -81,6 +85,23 @@ static esp_err_t graphite_init()
         return ESP_OK;
 }
 
+#ifdef CONFIG_IDF_TARGET_ESP8266
+static int packet_tx_status;
+static void track_packet_status(const esp_aio_t *aio)
+{
+	wifi_tx_status_t *status = (wifi_tx_status_t *) &(aio->ret);
+	struct pbuf *pbuf = aio->arg;
+	const uint8_t *buf = (const uint8_t *)pbuf->payload;
+
+	if (buf[12] == 0x08 && buf[13] == 0x00 && // IP
+	    buf[23] == 17 && // UDP
+	    buf[36] == 7 && buf[37] == 211) // port 2003
+	{
+		packet_tx_status = status->wifi_tx_result;
+	}
+}
+#endif
+
 esp_err_t graphite(const char *prefix, const char **metric, float *value)
 {
         if (sock < 0) {
@@ -94,13 +115,56 @@ esp_err_t graphite(const char *prefix, const char **metric, float *value)
         if (msg == NULL)
                 return ESP_FAIL;
 
-        int n;
-        for (;;) {
-                n = sendto(sock, msg, msglen, 0, (struct sockaddr *)&addr, sizeof addr);
+// call below relies on the following change to SDK
+#if 0
+diff --git a/components/lwip/port/esp8266/netif/wlanif.c b/components/lwip/port/esp8266/netif/wlanif.c
+index c301ee81..6867d852 100644
+--- a/components/lwip/port/esp8266/netif/wlanif.c
++++ b/components/lwip/port/esp8266/netif/wlanif.c
+@@ -355,10 +355,17 @@ static void low_level_init(struct netif* netif)
+  *
+  * @return 0 meaning successs
+  */
++
++
++void (* volatile low_level_send_callback)(const esp_aio_t*) = NULL;
++
+ static int low_level_send_cb(esp_aio_t* aio)
+ {
+     struct pbuf* pbuf = aio->arg;
+
++    if (low_level_send_callback)
++       low_level_send_callback(aio);
++
+#endif
+
+#ifdef CONFIG_IDF_TARGET_ESP8266
+        extern void (* volatile low_level_send_callback)(const esp_aio_t*);
+	low_level_send_callback = track_packet_status;
+        for (char i = 0; i < 3; i++) {
+                packet_tx_status = -1;
+                int n = sendto(sock, msg, msglen, 0, (struct sockaddr *)&addr, sizeof addr);
+                if (n != msglen) {
+                        vTaskDelay(150 / portTICK_PERIOD_MS);
+                        continue;
+                }
+                for (char j = 0; j < 64; j++) {
+                        vTaskDelay(50 / portTICK_PERIOD_MS);
+                        if (packet_tx_status != -1)
+                                break;
+                }
+                if (packet_tx_status == TX_STATUS_SUCCESS)
+                        break;
+        }
+        low_level_send_callback = NULL;
+#else
+        for (char i = 0; i < 3; i++) {
+                int n = sendto(sock, msg, msglen, 0, (struct sockaddr *)&addr, sizeof addr);
                 if (n == msglen)
                         break;
-                vTaskDelay(50 / portTICK_PERIOD_MS);
+                vTaskDelay(150 / portTICK_PERIOD_MS);
         }
+#endif
         free(msg);
 
         return ESP_OK;
