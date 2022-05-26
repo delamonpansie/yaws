@@ -272,6 +272,7 @@ esp_err_t wifi_connect(void)
 
         ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
         ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config));
+        ESP_ERROR_CHECK(esp_wifi_set_protocol(ESP_IF_WIFI_STA, WIFI_PROTOCOL_11B));
         ESP_ERROR_CHECK(esp_wifi_start());
 
 #if defined(CONFIG_IDF_TARGET_ESP8266) && defined(BOOTP_OTA)
