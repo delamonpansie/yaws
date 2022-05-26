@@ -315,7 +315,7 @@ void app_main()
 
         // connect to WiFi before anything else. OTA must run _before_ any potentially buggy code
         if (wifi_connect() != ESP_OK)
-                goto sleep;
+                esp_deep_sleep(10 * 1000000);
 
         // OTA source is checked only once after boot to save power.
         // If you want to force OTA: do a power cycle (reset is not enough).
@@ -351,22 +351,13 @@ void app_main()
 
         gpio_set_level(PWR_GPIO, 0); // power-off sensor module
 
-sleep:
         if (syslog_last_err[0])
                 memcpy((char *)last_err, syslog_last_err, sizeof(last_err));
 
         wifi_disconnect();
 
-        struct timeval now;
-        gettimeofday(&now, NULL);
-        unsigned offset = now.tv_sec * 1000000 + now.tv_usec + 500000;
-
         unsigned sleep_duration = 2 * 60 * 1000000;
         if (vdd < 1)
                 sleep_duration /= 3;
-
-        if (sleep_duration > offset)
-                sleep_duration -= offset;
-
-        esp_deep_sleep(sleep_duration - now.tv_sec * 1000000 - now.tv_usec - 500000);
+        esp_deep_sleep(sleep_duration);
 }
