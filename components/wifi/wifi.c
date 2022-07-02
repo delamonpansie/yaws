@@ -91,7 +91,9 @@ static const char *wifi_disconnect_reason(int r) {
         case WIFI_REASON_HANDSHAKE_TIMEOUT: return "HANDSHAKE_TIMEOUT";
         case WIFI_REASON_CONNECTION_FAIL: return "CONNECTION_FAIL";
         case WIFI_REASON_AP_TSF_RESET: return "AP_TSF_RESET";
+#if !defined(CONFIG_IDF_TARGET_ESP32)
         case WIFI_REASON_BASIC_RATE_NOT_SUPPORT: return "BASIC_RATE_NOT_SUPPORT";
+#endif
         default:
                 bzero(buf, sizeof buf);
                 snprintf(buf, sizeof buf - 1, "UNKNOWN_%d", r);
