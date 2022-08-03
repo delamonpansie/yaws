@@ -247,6 +247,6 @@ sleep:
 
         wifi_disconnect();
 
-        unsigned sleep_duration = 5 * 60 * 1000000;
+        unsigned sleep_duration = 15 * 60 * 1000000;
         esp_deep_sleep(sleep_duration - esp_log_timestamp() * 1000);
 }
