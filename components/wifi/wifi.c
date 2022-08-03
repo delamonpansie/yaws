@@ -252,6 +252,52 @@ esp_err_t ota(char *updated)
         return ret;
 }
 
+char vdd_offset_calibration_requested()
+{
+        const esp_app_desc_t *app_desc = esp_ota_get_app_description();
+        static char url[OTA_URL_LEN];
+        char result = 0;
+
+        snprintf(url, sizeof url, "http://%s%s.vdd_offset_calibration", macstr(ota_base, "/"), app_desc->project_name);
+        ESP_LOGI(TAG, "VDD offset calibration check %s", url);
+        esp_http_client_config_t client_config = {
+                .url = url,
+                .method = HTTP_METHOD_HEAD,
+        };
+        esp_http_client_handle_t client = esp_http_client_init(&client_config);
+        if (client == NULL)
+                // esp_http_client_init will log error for us
+                return 0;
+
+        esp_err_t err = esp_http_client_open(client, 0);
+        if (err != ESP_OK) {
+                ESP_LOGE(TAG, "Failed to open HTTP connection: %s", esp_err_to_name(err));
+                return 0;
+        }
+
+        int content_length = esp_http_client_fetch_headers(client);
+        if (content_length < 0) {
+                ESP_LOGE(TAG, "HTTP client fetch headers failed");
+                goto out;
+        }
+
+        int status_code = esp_http_client_get_status_code(client);
+        if (status_code == 404) {
+                ESP_LOGI(TAG, "OTA version %s not found", url);
+                goto out;
+        }
+
+        if (status_code != 200) {
+                ESP_LOGE(TAG, "OTA version %s fetch failed: status code %d", url, status_code);
+                goto out;
+        }
+
+        result = 1;
+out:
+        esp_http_client_cleanup(client);
+        return result;
+}
+
 esp_err_t wifi_connect(void)
 {
         if (status != NULL)

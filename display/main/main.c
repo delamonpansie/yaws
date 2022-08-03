@@ -1,4 +1,5 @@
 #include <string.h>
+#include <math.h>
 
 #include "driver/adc.h"
 #include "driver/gpio.h"
@@ -22,8 +23,14 @@
 
 static const char *TAG = "undefined";
 
+
+union fu {
+	float f;
+	u32_t u;
+};
+
 static float vdd;
-static void vdd_read()
+static float vdd_read_raw()
 {
         /* ADC1 channel 7 is GPIO35 */
         adc_power_acquire();
@@ -36,26 +43,54 @@ static void vdd_read()
         uint32_t adc_raw = adc1_get_raw((adc1_channel_t)ADC1_CHANNEL_7);
         uint32_t mv = esp_adc_cal_raw_to_voltage(adc_raw, &characteristics);
 
-        float offset = 3.23;  // (150kOhm + 330kOhm) / 150 kOhm
-        struct {
-                uint8_t mac[6];
-                float offset;
-        } tab[] = {
-                // #include "adc_offset_tab.h"
-                { .offset = 0 }
-        };
+	adc_power_release();
+        return (float)mv / 1000;
+}
+static float vdd_offset()
+{
+        nvs_handle nvs;
+        if (nvs_open(TAG, NVS_READONLY, &nvs) == ESP_OK) {
+		union fu fu;
+		esp_err_t err = nvs_get_u32(nvs, "vdd_offset", &fu.u);
+		nvs_close(nvs);
+		if (err == ESP_OK)
+			return fu.f;
+		ESP_LOGE(TAG, "nvs vdd_offset: %s", esp_err_to_name(err));
+	}
+	return 3.23;  // (150kOhm + 330kOhm) / 150 kOhm
+}
+static void vdd_read()
+{
+        vdd = vdd_read_raw() * vdd_offset();
+}
 
-        uint8_t mac[6];
-        esp_efuse_mac_get_default(mac);
-        for (int i = 0; tab[i].offset; i++) {
-                if (memcmp(mac, tab[i].mac, 6) == 0) {
-                        offset = tab[i].offset;
-                        break;
-                }
-        }
+static void vdd_offset_calibrate()
+{
+	float offset = vdd_offset();
+	for (;;) {
+		float new_offset = 4.2 / vdd_read_raw();
+		ESP_LOGI(TAG, "VDD offset %f", new_offset);
 
-        vdd = (float)mv / 1000 * offset;
-        adc_power_release();
+		if (fabs(new_offset - offset) > 0.001) {
+			nvs_handle nvs;
+			esp_err_t err;
+			if ((err = nvs_open(TAG, NVS_READWRITE, &nvs)) != ESP_OK)
+				goto out;
+			union fu fu = { .f = new_offset };
+			err = nvs_set_u32(nvs, "vdd_offset", fu.u);
+			if (err != ESP_OK)
+				goto out;
+			err = nvs_commit(nvs);
+		out:
+			if (err != ESP_OK)
+				ESP_LOGE(TAG, "nvs vdd_offset: %s", esp_err_to_name(err));
+			else
+				offset = new_offset;
+			nvs_close(nvs);
+		}
+
+		vTaskDelay(60000 / portTICK_PERIOD_MS);
+	}
 }
 
 char RTC_DATA_ATTR saved_etag[16] = {0};
@@ -192,6 +227,9 @@ void app_main(void)
                         vTaskDelay(100 / portTICK_PERIOD_MS);
                         esp_restart();
                 }
+
+		if (vdd_offset_calibration_requested())
+			vdd_offset_calibrate();
         }
 
         unsigned size;

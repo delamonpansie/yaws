@@ -9,3 +9,4 @@ esp_err_t wifi_disconnect(void);
 int wifi_connected(void);
 char *macstr(const char *prefix, const char *suffix);
 esp_err_t ota(char *updated);
+char vdd_offset_calibration_requested();
