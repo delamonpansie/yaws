@@ -242,22 +242,22 @@ static uint8_t i2c_addr()
 
         err = i2c_addr_load(&addr);
         if (err == ESP_OK) {
-                ESP_LOGD(TAG, "loaded I2C sensor addr 0x%02x from NVS", addr);
+                ESP_LOGD(TAG, "I2C sensor addr 0x%02x loaded from NVS", addr);
                 return addr;
         }
 
         addr = i2c_addr_detect();
         if (addr == 0x80) {
-                ESP_LOGI(TAG, "failed to detect I2C sensor");
+                ESP_LOGI(TAG, "detect I2C sensor");
                 return addr;
         }
 
         if (err == ESP_ERR_NVS_NOT_FOUND) {
                 err = i2c_addr_store(addr);
                 if (err != ESP_OK)
-                        ESP_LOGE(TAG, "failed to store i2c_addr to NVS: %s", esp_err_to_name(err));
+                        ESP_LOGE(TAG, "store i2c_addr to NVS: %s", esp_err_to_name(err));
         } else {
-                ESP_LOGE(TAG, "failed to load i2c_addr from NVS: %s", esp_err_to_name(err));
+                ESP_LOGE(TAG, "load i2c_addr from NVS: %s", esp_err_to_name(err));
         }
 
         return addr;
