@@ -345,6 +345,7 @@ esp_err_t wifi_disconnect(void)
 {
         if (status == NULL)
                 return ESP_ERR_INVALID_STATE;
+        ESP_LOGI(TAG, "wifi_disconnect");
 
         vEventGroupDelete(status);
         status = NULL;
